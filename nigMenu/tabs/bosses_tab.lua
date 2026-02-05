@@ -232,6 +232,7 @@ function BossesTab.init()
     local function persistBossToggles()
         if not bosses then return end
         Config.Toggles.bossToggles = {
+            farmEnabled = bosses.farmEnabled,
             farmBosses = bosses.farmBosses,
             farmAngels = bosses.farmAngels,
             farmMinWorld = bosses.farmMinWorld,
@@ -290,7 +291,7 @@ function BossesTab.init()
     
     farmBtn.MouseButton1Click:Connect(function()
         if not bosses then return end
-        
+
         if bosses.farmEnabled then
             bosses.stopFarmLoop()
             farmBtn.Text = '▶  START FARM'
@@ -300,7 +301,15 @@ function BossesTab.init()
             farmBtn.Text = '⏹  STOP FARM'
             farmBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
         end
+        persistBossToggles()
     end)
+
+    -- Resume farm if it was enabled before re-inject
+    if bosses and savedToggles and savedToggles.farmEnabled then
+        bosses.startFarmLoop()
+        farmBtn.Text = '⏹  STOP FARM'
+        farmBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+    end
     
     -- Status line
     statusLabel = Utils.create('TextLabel', {

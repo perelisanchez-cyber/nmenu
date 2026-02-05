@@ -19,6 +19,16 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.5",
+        date = "2026-02-05",
+        entries = {
+            { type = "changed", text = "Farm loop now scans worlds for actual NPCs instead of trusting event system" },
+            { type = "optimized", text = "Removed event-based targeting — teleport, check workspace, farm if NPC exists" },
+            { type = "added", text = "Farm button state persists across re-inject (auto-resumes on reload)" },
+            { type = "added", text = "Kill confirmation is now purely NPC-based (gone for 5s = dead)" },
+        }
+    },
+    {
         version = "1.0.4",
         date = "2026-02-05",
         entries = {

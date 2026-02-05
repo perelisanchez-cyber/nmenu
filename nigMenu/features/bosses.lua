@@ -809,215 +809,185 @@ end
 -- ============================================================================
 
 function Bosses.buildTargetList(skipSet)
+    -- Build list of all worlds in range (no event checks).
+    -- The farm loop will physically visit each world and check for NPCs.
     local targets = {}
     skipSet = skipSet or {}
-    
     for i = Bosses.farmMinWorld, Bosses.farmMaxWorld do
         local data = Bosses.Data[i]
-        if not data then continue end
-        
-        if Bosses.farmBosses and not skipSet[i .. "_Boss"] then
-            local active = Bosses.isBossActive(i)
-            if active == true then
-                table.insert(targets, {
-                    world = i, type = "Boss",
-                    eventName = data.bossEvent,
-                    bossName = data.bossEvent:gsub("_BossEvent", ""),
-                    coords = data.boss, spawn = data.spawn
-                })
-            end
-        end
-        
-        if Bosses.farmAngels and not skipSet[i .. "_Angel"] then
-            local active = Bosses.isAngelActive(i)
-            if active == true then
-                table.insert(targets, {
-                    world = i, type = "Angel",
-                    eventName = "BossAngel_" .. i .. "_BossEvent",
-                    bossName = "Boss Angel",
-                    coords = data.angel, spawn = data.spawn
-                })
-            end
+        if data and not skipSet[i] then
+            table.insert(targets, {
+                world = i,
+                spawn = data.spawn,
+                bossCoords = data.boss,
+                angelCoords = data.angel,
+                bossName = data.bossEvent:gsub("_BossEvent", ""),
+            })
         end
     end
     return targets
 end
 
 --[[
-    Main farm loop with manager restart integration.
-    
+    Main farm loop — NPC-based scanning.
+
     FLOW:
-    1. Scan for active bosses/angels via event system
-    2. TP to first active target
-    3. Wait for NPC to load in workspace
-    4. Monitor HP until boss dies (NPC gone + event inactive)
-    5. If autoRestartOnKill AND no more targets: POST /restart/<server>
-       -> Manager shuts down server + relaunches all accounts
-       -> Autoexec re-runs loader -> farm resumes on fresh server
-    6. If more targets remain: move to next one normally
+    1. Cycle through every world in [farmMinWorld..farmMaxWorld]
+    2. Teleport to the world, wait for workspace to load
+    3. Check workspace.Client.Enemies.WorldBoss for actual NPC models
+    4. If boss/angel NPC found → farm until dead (NPC gone for 5s)
+    5. After full scan cycle: if kills happened + autoRestartOnKill → restart
+    6. Otherwise loop back for another scan
 ]]
 function Bosses.startFarmLoop()
     local Config = getConfig()
     if not Config then return end
-    
+
     Bosses.farmEnabled = true
     Bosses.kills = 0
-    
+
     -- Start heartbeat so manager tracks our players
     Bosses.startHeartbeat()
-    
+
     local DRIFT_RADIUS = 50
-    local visited = {}
-    
+
     local NM = getNM()
     local con = NM and NM.Features and NM.Features.console
     local function log(msg)
         if con then con.log(msg) else print("[BossFarm] " .. msg) end
     end
-    
+
+    -- Helper: stay at target and farm until NPC disappears for 5 consecutive checks
+    local function farmNPC(worldNum, npcType, npcName, coords)
+        Bosses.currentTarget = {
+            world = worldNum, type = npcType,
+            bossName = npcName, coords = coords,
+        }
+        log("Farming W" .. worldNum .. " " .. npcType .. ": " .. npcName)
+
+        local noNpcCount = 0
+        while Bosses.farmEnabled and Config.State.running do
+            local npc, curHP, maxHP = Bosses.findWorldBossNPC(npcName)
+            if npc and curHP > 0 then
+                noNpcCount = 0
+                Bosses.status = "W" .. worldNum .. " " .. npcType .. " [HP: " .. curHP .. "/" .. maxHP .. "]"
+            else
+                noNpcCount = noNpcCount + 1
+                if noNpcCount >= 5 then
+                    Bosses.kills = Bosses.kills + 1
+                    log("W" .. worldNum .. " " .. npcType .. " DEAD! (kill #" .. Bosses.kills .. ")")
+                    Bosses.status = npcType .. " dead! (" .. Bosses.kills .. " kills)"
+                    return true -- killed
+                else
+                    Bosses.status = "W" .. worldNum .. " " .. npcType .. " - confirming kill..."
+                end
+            end
+
+            -- Reposition if drifted
+            pcall(function()
+                local hrp = Config.LocalPlayer.Character
+                    and Config.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if hrp and (hrp.Position - coords).Magnitude > DRIFT_RADIUS then
+                    hrp.CFrame = CFrame.new(coords)
+                end
+            end)
+
+            task.wait(1)
+        end
+        return false -- farm stopped
+    end
+
     task.spawn(function()
         -- Check server enforcement first
         if Bosses.checkServerEnforcement() then
             log("Server enforcement triggered - waiting for relaunch...")
             return
         end
-        
+
         while Bosses.farmEnabled and Config.State.running do
-            local targets = Bosses.buildTargetList(visited)
-            
-            if #targets == 0 then
-                visited = {}
-                Bosses.status = "Scanning for active targets..."
+            local killsThisCycle = 0
+
+            for i = Bosses.farmMinWorld, Bosses.farmMaxWorld do
+                if not Bosses.farmEnabled or not Config.State.running then break end
+
+                local data = Bosses.Data[i]
+                if not data then continue end
+                if not Bosses.farmBosses and not Bosses.farmAngels then continue end
+
+                -- Teleport to this world (lands at boss coords)
+                Bosses.status = "Scanning W" .. i .. " (" .. data.spawn .. ")..."
                 Bosses.currentTarget = nil
-                task.wait(2)
-                continue
-            end
-            
-            local target = targets[1]
-            local targetKey = target.world .. "_" .. target.type
-            
-            if not Bosses.farmEnabled or not Config.State.running then break end
-            
-            Bosses.currentTarget = target
-            Bosses.status = "TP -> W" .. target.world .. " " .. target.type .. " (" .. target.spawn .. ")"
-            log("Teleporting to W" .. target.world .. " " .. target.type)
-            
-            local success = Bosses.teleportAndWait(target.world, target.coords)
-            if not success then
-                Bosses.status = "TP failed, retrying..."
-                task.wait(2)
-                continue
-            end
-            
-            -- Grace period: wait for NPC to load
-            Bosses.status = "Waiting for W" .. target.world .. " " .. target.type .. " to load..."
-            local loadWait = 0
-            local npcFound = false
-            
-            while Bosses.farmEnabled and Config.State.running and loadWait < 10 do
-                local searchName = target.type == "Angel" and "Boss Angel" or target.bossName
-                local npcModel = Bosses.findWorldBossNPC(searchName)
-                if npcModel then npcFound = true; break end
-                loadWait = loadWait + 1
-                task.wait(1)
-            end
-            
-            if not npcFound then
-                visited[targetKey] = true
-                local stillActive
-                if target.type == "Boss" then stillActive = Bosses.isBossActive(target.world)
-                else stillActive = Bosses.isAngelActive(target.world) end
+                log("Scanning W" .. i .. " " .. data.spawn)
 
-                if stillActive == true then
-                    Bosses.status = "W" .. target.world .. " " .. target.type .. " - event active but NPC missing, skipping"
-                    log("W" .. target.world .. " " .. target.type .. " event active but NPC never loaded, skipping")
-                else
-                    Bosses.status = "W" .. target.world .. " " .. target.type .. " already gone"
+                local success = Bosses.teleportAndWait(i, data.boss)
+                if not success then
+                    log("TP to W" .. i .. " failed, skipping")
+                    continue
                 end
-                task.wait(2)
-                continue
-            end
-            
-            -- Main farming loop - stay until NPC is dead
-            Bosses.status = "Farming W" .. target.world .. " " .. target.type
-            local noNpcCount = 0
-            local bossConfirmedDead = false
-            
-            while Bosses.farmEnabled and Config.State.running do
-                local searchName = target.type == "Angel" and "Boss Angel" or target.bossName
-                local npcModel, curHP, maxHP = Bosses.findWorldBossNPC(searchName)
-                
-                if npcModel and curHP > 0 then
-                    noNpcCount = 0
-                    Bosses.status = "W" .. target.world .. " " .. target.type .. " [HP: " .. curHP .. "/" .. maxHP .. "]"
-                else
-                    noNpcCount = noNpcCount + 1
-                    if noNpcCount >= 3 then
-                        local stillActive
-                        if target.type == "Boss" then stillActive = Bosses.isBossActive(target.world)
-                        else stillActive = Bosses.isAngelActive(target.world) end
 
-                        if stillActive ~= true then
-                            Bosses.kills = Bosses.kills + 1
-                            bossConfirmedDead = true
-                            log("W" .. target.world .. " " .. target.type .. " DEAD! (kill #" .. Bosses.kills .. ")")
-                            Bosses.status = target.type .. " dead! (" .. Bosses.kills .. " kills)"
-                            visited[targetKey] = true
-                            break
-                        elseif noNpcCount >= 20 then
-                            -- NPC missing for 20s+ with event active — stuck, move on
-                            log("W" .. target.world .. " " .. target.type .. " NPC missing too long, skipping")
-                            Bosses.status = "W" .. target.world .. " " .. target.type .. " - NPC gone, moving on"
-                            visited[targetKey] = true
-                            break
-                        else
-                            Bosses.status = "W" .. target.world .. " " .. target.type .. " - NPC missing, event active..."
+                -- Extra settle time for WorldBoss folder to populate
+                task.wait(2)
+                if not Bosses.farmEnabled or not Config.State.running then break end
+
+                -- Check for boss NPC
+                if Bosses.farmBosses then
+                    local bossName = data.bossEvent:gsub("_BossEvent", "")
+                    local npc, hp = Bosses.findWorldBossNPC(bossName)
+                    if npc and hp > 0 then
+                        if farmNPC(i, "Boss", bossName, data.boss) then
+                            killsThisCycle = killsThisCycle + 1
                         end
+                        task.wait(2)
+                        if not Bosses.farmEnabled or not Config.State.running then break end
                     end
                 end
-                
-                -- Reposition if drifted
-                pcall(function()
-                    local hrp = Config.LocalPlayer.Character
-                        and Config.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                    if hrp and (hrp.Position - target.coords).Magnitude > DRIFT_RADIUS then
-                        hrp.CFrame = CFrame.new(target.coords)
+
+                -- Check for angel NPC (reposition to angel coords first)
+                if Bosses.farmAngels then
+                    pcall(function()
+                        local hrp = Config.LocalPlayer.Character
+                            and Config.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                        if hrp then hrp.CFrame = CFrame.new(data.angel) end
+                    end)
+                    task.wait(1)
+
+                    local npc, hp = Bosses.findWorldBossNPC("Boss Angel")
+                    if npc and hp > 0 then
+                        if farmNPC(i, "Angel", "Boss Angel", data.angel) then
+                            killsThisCycle = killsThisCycle + 1
+                        end
+                        task.wait(2)
+                        if not Bosses.farmEnabled or not Config.State.running then break end
                     end
-                end)
-                
-                task.wait(1)
-            end
-            
-            -- ==============================================================
-            -- BOSS DIED - CHECK IF WE SHOULD RESTART SERVER
-            -- ==============================================================
-            if bossConfirmedDead and Bosses.autoRestartOnKill and Bosses.farmEnabled then
-                local remainingTargets = Bosses.buildTargetList(visited)
-                
-                if #remainingTargets == 0 then
-                    -- No more active targets -> restart server to respawn everything
-                    log("All targets dead - RESTARTING SERVER!")
-                    Bosses.status = "All dead -> Restarting server..."
-                    task.wait(2)
-                    
-                    local server = Bosses.servers[Bosses.currentServerIndex]
-                    Bosses.restartServer(server and server.key or "farm")
-                    
-                    -- Manager will kill our process and relaunch
-                    -- Just wait here until we get killed
-                    Bosses.status = "Waiting for relaunch..."
-                    log("Waiting for manager to kill+relaunch...")
-                    task.wait(60)
-                    Bosses.farmEnabled = false
-                    return
-                else
-                    log(#remainingTargets .. " more targets, continuing farm")
                 end
             end
-            
-            task.wait(2)
+
+            -- ==============================================================
+            -- CYCLE COMPLETE
+            -- ==============================================================
+            if not Bosses.farmEnabled or not Config.State.running then break end
+
+            if killsThisCycle > 0 and Bosses.autoRestartOnKill then
+                log("Scan cycle done with " .. killsThisCycle .. " kills - RESTARTING SERVER!")
+                Bosses.status = "All scanned -> Restarting server..."
+                task.wait(2)
+
+                local server = Bosses.servers[Bosses.currentServerIndex]
+                Bosses.restartServer(server and server.key or "farm")
+
+                Bosses.status = "Waiting for relaunch..."
+                log("Waiting for manager to kill+relaunch...")
+                task.wait(60)
+                Bosses.farmEnabled = false
+                return
+            end
+
+            Bosses.status = "Scan complete, rescanning..."
+            Bosses.currentTarget = nil
+            log("Full scan done (" .. killsThisCycle .. " kills), restarting cycle")
+            task.wait(5)
         end
-        
+
         Bosses.status = "Idle"
         Bosses.currentTarget = nil
     end)
