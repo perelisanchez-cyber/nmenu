@@ -259,7 +259,8 @@ local tabModules = {
     { file = "bosses_tab.lua", name = "Bosses" },
     { file = "server_tab.lua", name = "ServerHopper" },
     { file = "utils_tab.lua", name = "Utils" },
-    { file = "config_tab.lua", name = "Config" }
+    { file = "config_tab.lua", name = "Config" },
+    { file = "changelog_tab.lua", name = "Changelog" }
 }
 
 for _, tab in ipairs(tabModules) do

@@ -520,7 +520,8 @@ function UI.createMainWindow()
         { 'Bosses',   '💀' },
         { 'ServerHopper', '🔄' },
         { 'Utils',    '🔧' },
-        { 'Config',   '⚙' }
+        { 'Config',   '⚙' },
+        { 'Changelog', '📝' }
     }
     
     for i, data in ipairs(tabData) do
