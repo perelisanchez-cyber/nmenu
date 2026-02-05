@@ -53,7 +53,7 @@ end
 -- ============================================================================
 
 local function fetch(path)
-    local url = RAW_BASE .. path
+    local url = RAW_BASE .. path .. "?cb=" .. tostring(tick())
     local ok, source = pcall(game.HttpGet, game, url)
 
     -- Fallback for executors that don't support game:HttpGet
