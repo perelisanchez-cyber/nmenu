@@ -121,35 +121,58 @@ end
 Bosses.privateServerOnly = true
 Bosses.forcedServerKey = "farm"
 
+Bosses._enforcementTriggered = false
+
 function Bosses.checkServerEnforcement()
     if not Bosses.privateServerOnly then return false end
 
-    local privateServerId = game.PrivateServerId
+    -- Guard: only allow enforcement once per session to prevent restart loops
+    if Bosses._enforcementTriggered then return false end
 
-    if not privateServerId or privateServerId == "" then
-        local NM = getNM()
-        local con = NM and NM.Features and NM.Features.console
-        local function log(msg)
-            if con then con.log(msg) else print(msg) end
-        end
-
-        log("SERVER ENFORCEMENT: In public server! Asking manager to relaunch to " .. Bosses.forcedServerKey)
-        Bosses.status = "Wrong server - relaunching via manager..."
-
-        pcall(function()
-            local HttpService = game:GetService("HttpService")
-            request({
-                Url = Bosses.managerUrl .. "/restart/" .. Bosses.forcedServerKey,
-                Method = "POST",
-                Headers = { ["Content-Type"] = "application/json" },
-                Body = HttpService:JSONEncode({ delay = 3 }),
-            })
-        end)
-
-        return true
+    local NM = getNM()
+    local con = NM and NM.Features and NM.Features.console
+    local function log(msg)
+        if con then con.log(msg) else print(msg) end
     end
 
-    return false
+    -- Retry: PrivateServerId can take several seconds to populate after join
+    local privateServerId = ""
+    for attempt = 1, 5 do
+        privateServerId = game.PrivateServerId or ""
+        if privateServerId ~= "" then break end
+        log("SERVER ENFORCEMENT: PrivateServerId empty, waiting... (attempt " .. attempt .. "/5)")
+        Bosses.status = "Checking server... (" .. attempt .. "/5)"
+        task.wait(3)
+    end
+
+    if privateServerId ~= "" then
+        log("SERVER ENFORCEMENT: OK — PrivateServerId = " .. privateServerId)
+        return false
+    end
+
+    -- Still empty after retries — we're in a public server
+    Bosses._enforcementTriggered = true -- prevent re-triggering
+
+    local username = ""
+    pcall(function() username = game:GetService("Players").LocalPlayer.Name end)
+
+    log("SERVER ENFORCEMENT: In public server after 5 checks! Restarting THIS account -> " .. Bosses.forcedServerKey)
+    Bosses.status = "Wrong server - relaunching this account..."
+
+    pcall(function()
+        local HttpService = game:GetService("HttpService")
+        -- Use single-account restart: POST /restart/<username>/<server>
+        -- This only kills THIS account's process, not all accounts
+        local url = Bosses.managerUrl .. "/restart/" .. HttpService:UrlEncode(username) .. "/" .. Bosses.forcedServerKey
+        request({
+            Url = url,
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = HttpService:JSONEncode({ delay = 5 }),
+        })
+    end)
+
+    return true
 end
 
 function Bosses.hopToServer(index)
@@ -1263,6 +1286,10 @@ function Bosses.checkAutoStart()
     local function log(msg)
         if con then con.log(msg) else print("[BossFarm] " .. msg) end
     end
+
+    -- Wait a moment for game services to fully initialize
+    log("Waiting for game to fully load...")
+    task.wait(5)
 
     -- Query manager for this account's assigned default server
     log("Querying manager for default server...")

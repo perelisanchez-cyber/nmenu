@@ -1477,22 +1477,37 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                 if not relaunch_accounts:
                     relaunch_accounts = list(manager.accounts.keys())
 
-            # â”€â”€ KILL ALL ROBLOX PROCESSES IMMEDIATELY â”€â”€
-            # Do this BEFORE responding so the disconnected clients close right away
-            # and don't pile up as stale windows
-            print(f"[RESTART] Killing all Roblox processes immediately...")
+            # â"€â"€ KILL ROBLOX PROCESSES â"€â"€
             killed = 0
-            for p in psutil.process_iter(["pid", "name"]):
-                try:
-                    if p.info["name"] and "RobloxPlayerBeta" in p.info["name"]:
+            if specific_account:
+                # Single-account restart: only kill THIS account's tracked PID
+                inst = manager.instances.get(specific_account)
+                target_pid = inst.get("pid", 0) if inst else 0
+                if target_pid:
+                    print(f"[RESTART] Killing only {specific_account}'s process (PID {target_pid})...")
+                    try:
+                        p = psutil.Process(target_pid)
                         p.kill()
-                        killed += 1
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
-            print(f"[RESTART] Killed {killed} Roblox process(es)")
-            # Clear tracked instances since we just killed everything
-            for acc_name in relaunch_accounts:
-                manager.instances.pop(acc_name, None)
+                        killed = 1
+                        print(f"[RESTART] Killed PID {target_pid} for {specific_account}")
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        print(f"[RESTART] PID {target_pid} already gone for {specific_account}")
+                else:
+                    print(f"[RESTART] No tracked PID for {specific_account}, skipping kill")
+                manager.instances.pop(specific_account, None)
+            else:
+                # Full restart: kill ALL Roblox processes
+                print(f"[RESTART] Killing all Roblox processes immediately...")
+                for p in psutil.process_iter(["pid", "name"]):
+                    try:
+                        if p.info["name"] and "RobloxPlayerBeta" in p.info["name"]:
+                            p.kill()
+                            killed += 1
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+                print(f"[RESTART] Killed {killed} Roblox process(es)")
+                for acc_name in relaunch_accounts:
+                    manager.instances.pop(acc_name, None)
 
             self._respond(200, {
                 "shutdown": shutdown_result,
