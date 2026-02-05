@@ -93,7 +93,7 @@ local function startStatusLoop()
             if bosses then
                 local T = Config.Theme
                 local now = nil
-                pcall(function() now = workspace:GetServerTimeNow() end)
+                pcall(function() now = os.time() end)
                 
                 -- Track the soonest upcoming boss/angel for the top card
                 local nextBossTime = nil
@@ -825,7 +825,7 @@ function BossesTab.init()
         
         -- Inline spawn timer: 💀 X:XX  👼 X:XX
         local timerLbl = Utils.create('TextLabel', {
-            Size = UDim2.new(0, 110, 1, 0),
+            Size = UDim2.new(0, 160, 1, 0),
             Position = UDim2.new(0, 130, 0, 0),
             BackgroundTransparency = 1,
             Text = '\xF0\x9F\x92\x80 --:--  \xF0\x9F\x91\xBC --:--',

@@ -396,8 +396,8 @@ function Bosses.debugEvents()
     if con then con.clear(); con.show() end
     
     local events = Bosses.getAllEvents()
-    local now = workspace:GetServerTimeNow()
-    
+    local now = os.time()
+
     log("====== EVENT MANAGER DUMP ======")
     log("Server time: " .. string.format("%.1f", now))
     log("Events found: " .. #events)
@@ -447,8 +447,8 @@ function Bosses.debugNextSpawn()
     if con then con.clear(); con.show() end
     
     local events = Bosses.getAllEvents()
-    local now = workspace:GetServerTimeNow()
-    
+    local now = os.time()
+
     log("====== NEXT SPAWN TIMES ======")
     log("Server time: " .. string.format("%.1f", now))
     log("")
