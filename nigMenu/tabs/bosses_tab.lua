@@ -96,7 +96,7 @@ function BossesTab.init()
     
     local controlCard = Utils.createCard(panel, nil, 186, yOffset)
     
-    Utils.createIcon(controlCard, 'X', Color3.fromRGB(255, 80, 80), 40, UDim2.new(0, 12, 0, 10))
+    Utils.createIcon(controlCard, '💀', Color3.fromRGB(255, 80, 80), 40, UDim2.new(0, 12, 0, 10))
     
     Utils.create('TextLabel', {
         Size = UDim2.new(0, 200, 0, 20),
@@ -128,7 +128,7 @@ function BossesTab.init()
         Position = UDim2.new(0, 12, 0, 52),
         BackgroundColor3 = Color3.fromRGB(60, 160, 60),
         BorderSizePixel = 0,
-        Text = '>  START FARM',
+        Text = '▶  START FARM',
         TextColor3 = Color3.new(1, 1, 1),
         TextSize = 15,
         Font = Enum.Font.GothamBold,
@@ -141,11 +141,11 @@ function BossesTab.init()
         
         if bosses.farmEnabled then
             bosses.stopFarmLoop()
-            farmBtn.Text = '>  START FARM'
+            farmBtn.Text = '▶  START FARM'
             farmBtn.BackgroundColor3 = Color3.fromRGB(60, 160, 60)
         else
             bosses.startFarmLoop()
-            farmBtn.Text = '||  STOP FARM'
+            farmBtn.Text = '⏹  STOP FARM'
             farmBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
         end
     end)
@@ -345,7 +345,7 @@ function BossesTab.init()
         Position = UDim2.new(0, 220, 0, rangeY + 1),
         BackgroundColor3 = T.CardHover,
         BorderSizePixel = 0,
-        Text = '# Events',
+        Text = '🔍 Events',
         TextColor3 = T.TextMuted,
         TextSize = 11,
         Font = Enum.Font.Gotham,
@@ -383,7 +383,7 @@ function BossesTab.init()
     
     local managerCard = Utils.createCard(panel, nil, 120, yOffset)
     
-    Utils.createIcon(managerCard, '~', Color3.fromRGB(255, 180, 40), 30, UDim2.new(0, 12, 0, 8))
+    Utils.createIcon(managerCard, '🔄', Color3.fromRGB(255, 180, 40), 30, UDim2.new(0, 12, 0, 8))
     
     Utils.create('TextLabel', {
         Size = UDim2.new(0, 200, 0, 16),
@@ -483,7 +483,7 @@ function BossesTab.init()
         Position = UDim2.new(0, 12, 0, 70),
         BackgroundColor3 = Color3.fromRGB(180, 80, 30),
         BorderSizePixel = 0,
-        Text = '~  RESTART SERVER NOW',
+        Text = '🔄  RESTART SERVER NOW',
         TextColor3 = Color3.new(1, 1, 1),
         TextSize = 12,
         Font = Enum.Font.GothamBold,
@@ -496,12 +496,12 @@ function BossesTab.init()
     
     manualRestartBtn.MouseButton1Click:Connect(function()
         if not bosses then return end
-        manualRestartBtn.Text = '~  Restarting...'
+        manualRestartBtn.Text = '🔄  Restarting...'
         manualRestartBtn.BackgroundColor3 = Color3.fromRGB(120, 60, 20)
         task.spawn(function()
             bosses.restartCurrentServer(function()
                 task.delay(3, function()
-                    manualRestartBtn.Text = '~  RESTART SERVER NOW'
+                    manualRestartBtn.Text = '🔄  RESTART SERVER NOW'
                     manualRestartBtn.BackgroundColor3 = Color3.fromRGB(180, 80, 30)
                 end)
             end)
@@ -546,7 +546,7 @@ function BossesTab.init()
         Size = UDim2.new(0, 50, 0, 16),
         Position = UDim2.new(0, 12, 0, 26),
         BackgroundTransparency = 1,
-        Text = 'X Boss:',
+        Text = '💀 Boss:',
         TextColor3 = Color3.fromRGB(255, 100, 100),
         TextSize = 12,
         Font = Enum.Font.GothamBold,
@@ -572,7 +572,7 @@ function BossesTab.init()
         Size = UDim2.new(0, 50, 0, 16),
         Position = UDim2.new(0, 12, 0, 46),
         BackgroundTransparency = 1,
-        Text = '^ Angel:',
+        Text = '👼 Angel:',
         TextColor3 = Color3.fromRGB(80, 160, 255),
         TextSize = 12,
         Font = Enum.Font.GothamBold,
@@ -760,7 +760,7 @@ function BossesTab.init()
             Position = UDim2.new(1, -132, 0.5, -11),
             BackgroundColor3 = Color3.fromRGB(180, 60, 60),
             BorderSizePixel = 0,
-            Text = 'X Boss',
+            Text = '💀 Boss',
             TextColor3 = Color3.new(1, 1, 1),
             TextSize = 12,
             Font = Enum.Font.GothamBold,
@@ -774,7 +774,7 @@ function BossesTab.init()
             Position = UDim2.new(1, -66, 0.5, -11),
             BackgroundColor3 = Color3.fromRGB(60, 120, 180),
             BorderSizePixel = 0,
-            Text = '^ Angel',
+            Text = '👼 Angel',
             TextColor3 = Color3.new(1, 1, 1),
             TextSize = 12,
             Font = Enum.Font.GothamBold,
