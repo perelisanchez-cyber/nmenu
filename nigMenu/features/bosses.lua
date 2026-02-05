@@ -50,7 +50,9 @@ Bosses.autoFarmOnJoin = false     -- Auto-start farm loop when menu loads (for a
 -- ============================================================================
 
 Bosses.servers = {
+    { name = "Farm Server",  joinCode = "78782432814231717861076663443421", key = "farm" },
     { name = "Raid Server",  joinCode = "92098597466172680429134969286305", key = "raid" },
+    { name = "Server 3",     joinCode = "29171578797016047998164784678510", key = "server3" },
 }
 Bosses.currentServerIndex = 1
 Bosses.loaderCode = ""
@@ -272,6 +274,7 @@ end
 -- ============================================================================
 -- BOSS DATA
 -- ============================================================================
+
 Bosses.Data = {
     { world = 1,  spawn = "Sacred Forest",        bossEvent = "RainHard_BossEvent",         boss = Vector3.new(1340.9, 161.7, -314.7),       angel = Vector3.new(1454.6, 160.8, -129.2) },
     { world = 2,  spawn = "Goblins Caves",       bossEvent = "Shaman_BossEvent",           boss = Vector3.new(26059.3, 115.6, 6472.7),      angel = Vector3.new(25973.1, 130.5, 6560.8) },
@@ -304,7 +307,6 @@ Bosses.Data = {
     { world = 29, spawn = "Shield Kingdom",          bossEvent = "Cerberus_BossEvent",         boss = Vector3.new(-25437.0, 1448.7, 653.6),     angel = Vector3.new(-25245.8, 1493.0, 682.4) },
     { world = 30, spawn = "Alchemy City",          bossEvent = "Ogre_BossEvent",             boss = Vector3.new(-23289.7, 1399.7, -3520.9),   angel = Vector3.new(-24201.1, 1400.2, -4002.1) },
 }
-
 
 -- ============================================================================
 -- EVENT SYSTEM
@@ -509,14 +511,12 @@ function Bosses.debugNextSpawn()
             }
             
             if isActive then
-                -- Currently active
                 if isAngel then
                     table.insert(activeAngels, entry)
                 else
                     table.insert(activeBosses, entry)
                 end
             elseif startT and startT > now then
-                -- Upcoming (future start time)
                 if isAngel then
                     table.insert(upcomingAngels, entry)
                 else
@@ -560,9 +560,9 @@ function Bosses.debugNextSpawn()
     
     log("--- NEXT BOSS ---")
     if #upcomingBosses > 0 then
-        local next = upcomingBosses[1]
-        local countdown = next.startTime - now
-        log(string.format("  >> %s", next.friendly))
+        local nxt = upcomingBosses[1]
+        local countdown = nxt.startTime - now
+        log(string.format("  >> %s", nxt.friendly))
         log(string.format("     Spawns in: %s", Bosses.formatTime(countdown)))
     else
         log("  No upcoming boss events found")
@@ -572,9 +572,9 @@ function Bosses.debugNextSpawn()
     
     log("--- NEXT ANGEL ---")
     if #upcomingAngels > 0 then
-        local next = upcomingAngels[1]
-        local countdown = next.startTime - now
-        log(string.format("  >> %s", next.friendly))
+        local nxt = upcomingAngels[1]
+        local countdown = nxt.startTime - now
+        log(string.format("  >> %s", nxt.friendly))
         log(string.format("     Spawns in: %s", Bosses.formatTime(countdown)))
     else
         log("  No upcoming angel events found")
@@ -591,7 +591,7 @@ function Bosses.debugNextSpawn()
     local allUpcoming = {}
     for _, e in ipairs(upcomingBosses) do
         if e.startTime and (e.startTime - now) <= 3600 then
-            e._type = "BOSS"
+            e._type = "BOSS "
             table.insert(allUpcoming, e)
         end
     end
@@ -1082,4 +1082,3 @@ function Bosses.checkAutoStart()
 end
 
 return Bosses
-
