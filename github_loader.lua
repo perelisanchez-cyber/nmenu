@@ -187,6 +187,13 @@ if NM.Features.bosses and NM.Features.bosses.checkAutoStart then
     pcall(NM.Features.bosses.checkAutoStart)
 end
 
+-- Always start heartbeat so the manager watchdog knows we're alive
+-- (safe to call even if farm starts it later — startHeartbeat guards against duplicates)
+if NM.Features.bosses and NM.Features.bosses.startHeartbeat then
+    pcall(NM.Features.bosses.startHeartbeat)
+    print("[nigMenu] ✓ Heartbeat started")
+end
+
 print("[nigMenu] ============================================")
 print("[nigMenu] nigMenu LOADED (GitHub)")
 print("[nigMenu] Toggle: " .. (NM.Config.State.menuKeybind and NM.Config.State.menuKeybind.Name or "RightControl"))
