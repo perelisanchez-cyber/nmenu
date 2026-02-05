@@ -11,6 +11,7 @@
     - Live status display
     - Manual TP buttons per world
     - Per-world spawn timers inline
+    - Persistent toggle states via Settings
 ]]
 
 local BossesTab = {}
@@ -28,6 +29,21 @@ local statusUpdateRunning = false
 
 -- Per-world timer labels: worldTimerLabels[worldNum] = TextLabel
 local worldTimerLabels = {}
+
+-- Spawn Timers card labels
+local bossTimerLabel = nil
+local angelTimerLabel = nil
+
+-- ============================================================================
+-- SETTINGS PERSISTENCE HELPERS
+-- ============================================================================
+
+local function saveBossSettings()
+    local NM = getNM()
+    if NM and NM.Settings then
+        NM.Settings.save()
+    end
+end
 
 -- ============================================================================
 -- STATUS UPDATE LOOP
@@ -72,11 +88,20 @@ local function startStatusLoop()
             end
             
             -- ============================================================
-            -- PER-WORLD TIMER UPDATES
+            -- SPAWN TIMERS CARD + PER-WORLD TIMER UPDATES (event system)
             -- ============================================================
             if bosses then
+                local T = Config.Theme
                 local now = nil
                 pcall(function() now = workspace:GetServerTimeNow() end)
+                
+                -- Track the soonest upcoming boss/angel for the top card
+                local nextBossTime = nil
+                local nextBossName = nil
+                local activeBossName = nil
+                local nextAngelTime = nil
+                local nextAngelName = nil
+                local activeAngelName = nil
                 
                 for worldNum, lbl in pairs(worldTimerLabels) do
                     if not lbl or not lbl.Parent then continue end
@@ -84,29 +109,49 @@ local function startStatusLoop()
                     pcall(function()
                         local bossActive, bossInfo = bosses.isBossActive(worldNum)
                         local angelActive, angelInfo = bosses.isAngelActive(worldNum)
+                        local data = bosses.Data[worldNum]
+                        local wName = data and data.spawn or ("W" .. worldNum)
                         
                         local bStr = "--:--"
                         local aStr = "--:--"
                         
+                        -- Boss timer
                         if bossActive == true then
                             bStr = "ALIVE"
+                            if not activeBossName then
+                                activeBossName = wName
+                            end
                         elseif bossInfo and bossInfo.startTime and now then
                             local remaining = bossInfo.startTime - now
                             if remaining > 0 then
                                 bStr = bosses.formatTime(remaining)
+                                if not nextBossTime or remaining < nextBossTime then
+                                    nextBossTime = remaining
+                                    nextBossName = wName
+                                end
                             else
                                 bStr = "ALIVE"
+                                if not activeBossName then activeBossName = wName end
                             end
                         end
                         
+                        -- Angel timer
                         if angelActive == true then
                             aStr = "ALIVE"
+                            if not activeAngelName then
+                                activeAngelName = wName
+                            end
                         elseif angelInfo and angelInfo.startTime and now then
                             local remaining = angelInfo.startTime - now
                             if remaining > 0 then
                                 aStr = bosses.formatTime(remaining)
+                                if not nextAngelTime or remaining < nextAngelTime then
+                                    nextAngelTime = remaining
+                                    nextAngelName = wName
+                                end
                             else
                                 aStr = "ALIVE"
+                                if not activeAngelName then activeAngelName = wName end
                             end
                         end
                         
@@ -119,6 +164,33 @@ local function startStatusLoop()
                             lbl.TextColor3 = Color3.fromRGB(130, 130, 140)
                         end
                     end)
+                end
+                
+                -- Update the SPAWN TIMERS card labels
+                if bossTimerLabel and bossTimerLabel.Parent then
+                    if activeBossName then
+                        bossTimerLabel.Text = "ACTIVE — " .. activeBossName
+                        bossTimerLabel.TextColor3 = Color3.fromRGB(80, 255, 80)
+                    elseif nextBossTime and nextBossName then
+                        bossTimerLabel.Text = bosses.formatTime(nextBossTime) .. " — " .. nextBossName
+                        bossTimerLabel.TextColor3 = T.Text
+                    else
+                        bossTimerLabel.Text = "No upcoming bosses"
+                        bossTimerLabel.TextColor3 = T.TextMuted
+                    end
+                end
+                
+                if angelTimerLabel and angelTimerLabel.Parent then
+                    if activeAngelName then
+                        angelTimerLabel.Text = "ACTIVE — " .. activeAngelName
+                        angelTimerLabel.TextColor3 = Color3.fromRGB(80, 255, 80)
+                    elseif nextAngelTime and nextAngelName then
+                        angelTimerLabel.Text = bosses.formatTime(nextAngelTime) .. " — " .. nextAngelName
+                        angelTimerLabel.TextColor3 = T.Text
+                    else
+                        angelTimerLabel.Text = "No upcoming angels"
+                        angelTimerLabel.TextColor3 = T.TextMuted
+                    end
                 end
             end
             
@@ -144,6 +216,31 @@ function BossesTab.init()
     local T = Config.Theme
     local yOffset = 0
     local bosses = NM and NM.Features and NM.Features.bosses
+    
+    -- Load saved boss toggle states from Config.Toggles
+    local savedToggles = Config.Toggles.bossToggles
+    if bosses and savedToggles then
+        if savedToggles.farmBosses ~= nil then bosses.farmBosses = savedToggles.farmBosses end
+        if savedToggles.farmAngels ~= nil then bosses.farmAngels = savedToggles.farmAngels end
+        if savedToggles.farmMinWorld ~= nil then bosses.farmMinWorld = savedToggles.farmMinWorld end
+        if savedToggles.farmMaxWorld ~= nil then bosses.farmMaxWorld = savedToggles.farmMaxWorld end
+        if savedToggles.autoRestartOnKill ~= nil then bosses.autoRestartOnKill = savedToggles.autoRestartOnKill end
+        if savedToggles.autoFarmOnJoin ~= nil then bosses.autoFarmOnJoin = savedToggles.autoFarmOnJoin end
+    end
+    
+    -- Helper: update Config.Toggles.bossToggles and save
+    local function persistBossToggles()
+        if not bosses then return end
+        Config.Toggles.bossToggles = {
+            farmBosses = bosses.farmBosses,
+            farmAngels = bosses.farmAngels,
+            farmMinWorld = bosses.farmMinWorld,
+            farmMaxWorld = bosses.farmMaxWorld,
+            autoRestartOnKill = bosses.autoRestartOnKill,
+            autoFarmOnJoin = bosses.autoFarmOnJoin,
+        }
+        saveBossSettings()
+    end
     
     -- ========================================================================
     -- FARM CONTROLS CARD
@@ -267,9 +364,9 @@ function BossesTab.init()
     local bossToggle = Utils.create('TextButton', {
         Size = UDim2.new(0, 36, 0, 18),
         Position = UDim2.new(0, 65, 0, optY + 1),
-        BackgroundColor3 = Color3.fromRGB(60, 160, 60),
+        BackgroundColor3 = (bosses and bosses.farmBosses) and Color3.fromRGB(60, 160, 60) or T.CardHover,
         BorderSizePixel = 0,
-        Text = 'ON',
+        Text = (bosses and bosses.farmBosses) and 'ON' or 'OFF',
         TextColor3 = Color3.new(1, 1, 1),
         TextSize = 11,
         Font = Enum.Font.GothamBold,
@@ -282,6 +379,7 @@ function BossesTab.init()
         bosses.farmBosses = not bosses.farmBosses
         bossToggle.Text = bosses.farmBosses and 'ON' or 'OFF'
         bossToggle.BackgroundColor3 = bosses.farmBosses and Color3.fromRGB(60, 160, 60) or T.CardHover
+        persistBossToggles()
     end)
     
     -- Farm Angels toggle
@@ -300,9 +398,9 @@ function BossesTab.init()
     local angelToggle = Utils.create('TextButton', {
         Size = UDim2.new(0, 36, 0, 18),
         Position = UDim2.new(0, 168, 0, optY + 1),
-        BackgroundColor3 = Color3.fromRGB(60, 160, 60),
+        BackgroundColor3 = (bosses and bosses.farmAngels) and Color3.fromRGB(60, 160, 60) or T.CardHover,
         BorderSizePixel = 0,
-        Text = 'ON',
+        Text = (bosses and bosses.farmAngels) and 'ON' or 'OFF',
         TextColor3 = Color3.new(1, 1, 1),
         TextSize = 11,
         Font = Enum.Font.GothamBold,
@@ -315,6 +413,7 @@ function BossesTab.init()
         bosses.farmAngels = not bosses.farmAngels
         angelToggle.Text = bosses.farmAngels and 'ON' or 'OFF'
         angelToggle.BackgroundColor3 = bosses.farmAngels and Color3.fromRGB(60, 160, 60) or T.CardHover
+        persistBossToggles()
     end)
     
     -- ====================================================================
@@ -382,6 +481,7 @@ function BossesTab.init()
         else
             minBox.Text = tostring(bosses.farmMinWorld)
         end
+        persistBossToggles()
     end)
     
     maxBox.FocusLost:Connect(function()
@@ -392,6 +492,7 @@ function BossesTab.init()
         else
             maxBox.Text = tostring(bosses.farmMaxWorld)
         end
+        persistBossToggles()
     end)
     
     -- Debug events button
@@ -497,6 +598,7 @@ function BossesTab.init()
         bosses.autoRestartOnKill = not bosses.autoRestartOnKill
         autoRestartToggle.Text = bosses.autoRestartOnKill and 'ON' or 'OFF'
         autoRestartToggle.BackgroundColor3 = bosses.autoRestartOnKill and Color3.fromRGB(60, 160, 60) or T.CardHover
+        persistBossToggles()
     end)
     
     -- Auto-Farm-On-Join toggle
@@ -530,6 +632,7 @@ function BossesTab.init()
         bosses.autoFarmOnJoin = not bosses.autoFarmOnJoin
         autoFarmToggle.Text = bosses.autoFarmOnJoin and 'ON' or 'OFF'
         autoFarmToggle.BackgroundColor3 = bosses.autoFarmOnJoin and Color3.fromRGB(60, 160, 60) or T.CardHover
+        persistBossToggles()
     end)
     
     -- Manual Restart Server button
@@ -579,7 +682,7 @@ function BossesTab.init()
     yOffset = yOffset + 128
     
     -- ========================================================================
-    -- SPAWN TIMERS CARD
+    -- SPAWN TIMERS CARD (now uses event system, not billboard)
     -- ========================================================================
     
     local timerCard = Utils.createCard(panel, nil, 70, yOffset)
@@ -609,7 +712,7 @@ function BossesTab.init()
         Parent = timerCard
     })
     
-    local bossTimerLabel = Utils.create('TextLabel', {
+    bossTimerLabel = Utils.create('TextLabel', {
         Size = UDim2.new(1, -80, 0, 16),
         Position = UDim2.new(0, 68, 0, 26),
         BackgroundTransparency = 1,
@@ -635,7 +738,7 @@ function BossesTab.init()
         Parent = timerCard
     })
     
-    local angelTimerLabel = Utils.create('TextLabel', {
+    angelTimerLabel = Utils.create('TextLabel', {
         Size = UDim2.new(1, -80, 0, 16),
         Position = UDim2.new(0, 68, 0, 46),
         BackgroundTransparency = 1,
@@ -647,99 +750,6 @@ function BossesTab.init()
         TextTruncate = Enum.TextTruncate.AtEnd,
         Parent = timerCard
     })
-    
-    -- Timer update loop - reads from PlayerGui.Billboard.Timers
-    task.spawn(function()
-        local Config2 = getConfig()
-        while Config2 and Config2.State.running do
-            pcall(function()
-                if not bossTimerLabel.Parent or not angelTimerLabel.Parent then return end
-                
-                local timersFolder = nil
-                pcall(function()
-                    timersFolder = Config2.LocalPlayer.PlayerGui.Billboard.Timers
-                end)
-                
-                if not timersFolder then
-                    bossTimerLabel.Text = "Timers not found"
-                    bossTimerLabel.TextColor3 = T.TextMuted
-                    angelTimerLabel.Text = "Timers not found"
-                    angelTimerLabel.TextColor3 = T.TextMuted
-                    return
-                end
-                
-                local bossText = nil
-                local angelText = nil
-                
-                for _, timer in ipairs(timersFolder:GetChildren()) do
-                    pcall(function()
-                        local name = timer.Name:lower()
-                        
-                        -- Collect all text from this timer element
-                        local texts = {}
-                        for _, desc in ipairs(timer:GetDescendants()) do
-                            if desc:IsA("TextLabel") and desc.Text ~= "" then
-                                table.insert(texts, desc.Text)
-                            end
-                        end
-                        local combined = table.concat(texts, " | ")
-                        
-                        -- Determine if this is a boss or angel timer
-                        local isAngel = name:find("angel") ~= nil
-                        local isBoss = not isAngel and (name:find("boss") ~= nil or name:find("_bossevent") ~= nil)
-                        
-                        -- If can't determine from name, check text content
-                        if not isAngel and not isBoss then
-                            for _, t in ipairs(texts) do
-                                local tl = t:lower()
-                                if tl:find("angel") then isAngel = true; break end
-                                if tl:find("boss") then isBoss = true; break end
-                            end
-                        end
-                        
-                        -- If still can't tell, check visibility
-                        if not isAngel and not isBoss then return end
-                        
-                        if isAngel then
-                            angelText = combined
-                        else
-                            bossText = combined
-                        end
-                    end)
-                end
-                
-                -- Update labels
-                if bossText then
-                    bossTimerLabel.Text = bossText
-                    -- Color green if it contains "active" or HP text, white otherwise
-                    local bl = bossText:lower()
-                    if bl:find("active") or bl:find("/") then
-                        bossTimerLabel.TextColor3 = Color3.fromRGB(80, 255, 80)
-                    else
-                        bossTimerLabel.TextColor3 = T.Text
-                    end
-                else
-                    bossTimerLabel.Text = "No boss timer"
-                    bossTimerLabel.TextColor3 = T.TextMuted
-                end
-                
-                if angelText then
-                    angelTimerLabel.Text = angelText
-                    local al = angelText:lower()
-                    if al:find("active") or al:find("/") then
-                        angelTimerLabel.TextColor3 = Color3.fromRGB(80, 255, 80)
-                    else
-                        angelTimerLabel.TextColor3 = T.Text
-                    end
-                else
-                    angelTimerLabel.Text = "No angel timer"
-                    angelTimerLabel.TextColor3 = T.TextMuted
-                end
-            end)
-            
-            task.wait(1)
-        end
-    end)
     
     yOffset = yOffset + 78
     
