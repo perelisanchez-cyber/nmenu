@@ -8,9 +8,9 @@
     BOSS FARM LOOP:
       1. Auto-farm teleports to active boss/angel
       2. Monitors boss HP via workspace detection
-      3. When all targets dead â†’ sends POST /restart/<server> to roblox_manager
+      3. When all targets dead -> sends POST /restart/<server> to roblox_manager
       4. Manager shuts down private server + relaunches ALL accounts
-      5. Autoexec re-runs loader â†’ farm resumes automatically
+      5. Autoexec re-runs loader -> farm resumes automatically
       6. Loop repeats infinitely
     
     Event naming from EventManagerShared:
@@ -438,17 +438,6 @@ end
 -- NEXT SPAWN PREDICTION
 -- ============================================================================
 
---[[
-    Scans ALL events in EventManagerShared to find the next upcoming
-    boss and angel spawn times. Uses the startTime/endTime attributes
-    that the game's event system already tracks.
-    
-    Prints to console:
-      - Currently active bosses/angels (with time remaining)
-      - Next upcoming boss spawn (with countdown)
-      - Next upcoming angel spawn (with countdown)
-      - Full schedule of upcoming spawns within the next hour
-]]
 function Bosses.debugNextSpawn()
     local NM = getNM()
     local con = NM and NM.Features and NM.Features.console
@@ -464,7 +453,6 @@ function Bosses.debugNextSpawn()
     log("Server time: " .. string.format("%.1f", now))
     log("")
     
-    -- Categorize all events
     local activeBosses = {}
     local activeAngels = {}
     local upcomingBosses = {}
@@ -477,12 +465,10 @@ function Bosses.debugNextSpawn()
             local startT = event:GetAttribute("startTime")
             local endT = event:GetAttribute("endTime")
             
-            -- Determine type
             local isAngel = name:find("BossAngel_") ~= nil
             local isBoss = not isAngel and name:find("_BossEvent") ~= nil
             if not isAngel and not isBoss then return end
             
-            -- Get a friendly name
             local friendly = name:gsub("_BossEvent", "")
             if isAngel then
                 local worldNum = name:match("BossAngel_(%d+)")
@@ -492,7 +478,6 @@ function Bosses.debugNextSpawn()
                     friendly = "Angel W" .. worldNum .. (data and (" " .. data.spawn) or "")
                 end
             else
-                -- Map boss event name to world
                 for _, data in ipairs(Bosses.Data) do
                     if data.bossEvent == name then
                         friendly = friendly .. " (W" .. data.world .. " " .. data.spawn .. ")"
@@ -526,37 +511,24 @@ function Bosses.debugNextSpawn()
         end)
     end
     
-    -- Sort upcoming by startTime (soonest first)
     table.sort(upcomingBosses, function(a, b) return (a.startTime or 0) < (b.startTime or 0) end)
     table.sort(upcomingAngels, function(a, b) return (a.startTime or 0) < (b.startTime or 0) end)
     
-    -- ================================================================
-    -- ACTIVE RIGHT NOW
-    -- ================================================================
-    
     log("--- ACTIVE NOW ---")
-    
     if #activeBosses == 0 and #activeAngels == 0 then
         log("  (none)")
     end
-    
     for _, e in ipairs(activeBosses) do
         local remaining = e.endTime and (e.endTime - now) or nil
         local remStr = remaining and Bosses.formatTime(remaining) or "?"
         log(string.format("  BOSS  %-40s ends in %s", e.friendly, remStr))
     end
-    
     for _, e in ipairs(activeAngels) do
         local remaining = e.endTime and (e.endTime - now) or nil
         local remStr = remaining and Bosses.formatTime(remaining) or "?"
         log(string.format("  ANGEL %-40s ends in %s", e.friendly, remStr))
     end
-    
     log("")
-    
-    -- ================================================================
-    -- NEXT SPAWNS
-    -- ================================================================
     
     log("--- NEXT BOSS ---")
     if #upcomingBosses > 0 then
@@ -567,7 +539,6 @@ function Bosses.debugNextSpawn()
     else
         log("  No upcoming boss events found")
     end
-    
     log("")
     
     log("--- NEXT ANGEL ---")
@@ -579,15 +550,9 @@ function Bosses.debugNextSpawn()
     else
         log("  No upcoming angel events found")
     end
-    
     log("")
     
-    -- ================================================================
-    -- UPCOMING (next hour)
-    -- ================================================================
-    
     log("--- ALL UPCOMING (next 60 min) ---")
-    
     local allUpcoming = {}
     for _, e in ipairs(upcomingBosses) do
         if e.startTime and (e.startTime - now) <= 3600 then
@@ -601,9 +566,7 @@ function Bosses.debugNextSpawn()
             table.insert(allUpcoming, e)
         end
     end
-    
     table.sort(allUpcoming, function(a, b) return (a.startTime or 0) < (b.startTime or 0) end)
-    
     if #allUpcoming == 0 then
         log("  (none within 60 min)")
     else
@@ -612,11 +575,9 @@ function Bosses.debugNextSpawn()
             log(string.format("  %s  %-40s in %s", e._type, e.friendly, Bosses.formatTime(countdown)))
         end
     end
-    
     log("")
     log("====== END ======")
     
-    -- Return useful data for programmatic use
     return {
         activeBosses = activeBosses,
         activeAngels = activeAngels,
