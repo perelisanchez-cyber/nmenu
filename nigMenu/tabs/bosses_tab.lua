@@ -169,10 +169,10 @@ local function startStatusLoop()
                 -- Update the SPAWN TIMERS card labels
                 if bossTimerLabel and bossTimerLabel.Parent then
                     if activeBossName then
-                        bossTimerLabel.Text = "ACTIVE — " .. activeBossName
+                        bossTimerLabel.Text = "ACTIVE \xE2\x80\x94 " .. activeBossName
                         bossTimerLabel.TextColor3 = Color3.fromRGB(80, 255, 80)
                     elseif nextBossTime and nextBossName then
-                        bossTimerLabel.Text = bosses.formatTime(nextBossTime) .. " — " .. nextBossName
+                        bossTimerLabel.Text = bosses.formatTime(nextBossTime) .. " \xE2\x80\x94 " .. nextBossName
                         bossTimerLabel.TextColor3 = T.Text
                     else
                         bossTimerLabel.Text = "No upcoming bosses"
@@ -182,10 +182,10 @@ local function startStatusLoop()
                 
                 if angelTimerLabel and angelTimerLabel.Parent then
                     if activeAngelName then
-                        angelTimerLabel.Text = "ACTIVE — " .. activeAngelName
+                        angelTimerLabel.Text = "ACTIVE \xE2\x80\x94 " .. activeAngelName
                         angelTimerLabel.TextColor3 = Color3.fromRGB(80, 255, 80)
                     elseif nextAngelTime and nextAngelName then
-                        angelTimerLabel.Text = bosses.formatTime(nextAngelTime) .. " — " .. nextAngelName
+                        angelTimerLabel.Text = bosses.formatTime(nextAngelTime) .. " \xE2\x80\x94 " .. nextAngelName
                         angelTimerLabel.TextColor3 = T.Text
                     else
                         angelTimerLabel.Text = "No upcoming angels"
@@ -228,10 +228,14 @@ function BossesTab.init()
         if savedToggles.autoFarmOnJoin ~= nil then bosses.autoFarmOnJoin = savedToggles.autoFarmOnJoin end
     end
     
+    -- Check if farm should auto-resume from saved state
+    local shouldResumeFarm = bosses and savedToggles and savedToggles.farmEnabled == true
+    
     -- Helper: update Config.Toggles.bossToggles and save
     local function persistBossToggles()
         if not bosses then return end
         Config.Toggles.bossToggles = {
+            farmEnabled = bosses.farmEnabled,
             farmBosses = bosses.farmBosses,
             farmAngels = bosses.farmAngels,
             farmMinWorld = bosses.farmMinWorld,
@@ -248,7 +252,7 @@ function BossesTab.init()
     
     local controlCard = Utils.createCard(panel, nil, 186, yOffset)
     
-    Utils.createIcon(controlCard, '💀', Color3.fromRGB(255, 80, 80), 40, UDim2.new(0, 12, 0, 10))
+    Utils.createIcon(controlCard, '\xF0\x9F\x92\x80', Color3.fromRGB(255, 80, 80), 40, UDim2.new(0, 12, 0, 10))
     
     Utils.create('TextLabel', {
         Size = UDim2.new(0, 200, 0, 20),
@@ -274,13 +278,13 @@ function BossesTab.init()
         Parent = controlCard
     })
     
-    -- START / STOP button
+    -- START / STOP button (reflects saved state)
     local farmBtn = Utils.create('TextButton', {
         Size = UDim2.new(1, -24, 0, 32),
         Position = UDim2.new(0, 12, 0, 52),
-        BackgroundColor3 = Color3.fromRGB(60, 160, 60),
+        BackgroundColor3 = shouldResumeFarm and Color3.fromRGB(200, 60, 60) or Color3.fromRGB(60, 160, 60),
         BorderSizePixel = 0,
-        Text = '▶  START FARM',
+        Text = shouldResumeFarm and '\xE2\x8F\xB9  STOP FARM' or '\xE2\x96\xB6  START FARM',
         TextColor3 = Color3.new(1, 1, 1),
         TextSize = 15,
         Font = Enum.Font.GothamBold,
@@ -288,18 +292,28 @@ function BossesTab.init()
     })
     Utils.addCorner(farmBtn, 6)
     
+    -- Auto-resume farm if it was active when last saved
+    if shouldResumeFarm and bosses and not bosses.farmEnabled then
+        task.delay(2, function()
+            if not bosses.farmEnabled then
+                bosses.startFarmLoop()
+            end
+        end)
+    end
+    
     farmBtn.MouseButton1Click:Connect(function()
         if not bosses then return end
         
         if bosses.farmEnabled then
             bosses.stopFarmLoop()
-            farmBtn.Text = '▶  START FARM'
+            farmBtn.Text = '\xE2\x96\xB6  START FARM'
             farmBtn.BackgroundColor3 = Color3.fromRGB(60, 160, 60)
         else
             bosses.startFarmLoop()
-            farmBtn.Text = '⏹  STOP FARM'
+            farmBtn.Text = '\xE2\x8F\xB9  STOP FARM'
             farmBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
         end
+        persistBossToggles()
     end)
     
     -- Status line
@@ -307,8 +321,8 @@ function BossesTab.init()
         Size = UDim2.new(1, -24, 0, 16),
         Position = UDim2.new(0, 12, 0, 90),
         BackgroundTransparency = 1,
-        Text = 'Idle',
-        TextColor3 = T.TextMuted,
+        Text = shouldResumeFarm and 'Resuming...' or 'Idle',
+        TextColor3 = shouldResumeFarm and Color3.fromRGB(80, 255, 80) or T.TextMuted,
         TextSize = 13,
         Font = Enum.Font.Gotham,
         TextXAlignment = Enum.TextXAlignment.Left,
@@ -501,7 +515,7 @@ function BossesTab.init()
         Position = UDim2.new(0, 220, 0, rangeY + 1),
         BackgroundColor3 = T.CardHover,
         BorderSizePixel = 0,
-        Text = '🔍 Events',
+        Text = '\xF0\x9F\x94\x8D Events',
         TextColor3 = T.TextMuted,
         TextSize = 11,
         Font = Enum.Font.Gotham,
@@ -539,7 +553,7 @@ function BossesTab.init()
     
     local managerCard = Utils.createCard(panel, nil, 120, yOffset)
     
-    Utils.createIcon(managerCard, '🔄', Color3.fromRGB(255, 180, 40), 30, UDim2.new(0, 12, 0, 8))
+    Utils.createIcon(managerCard, '\xF0\x9F\x94\x84', Color3.fromRGB(255, 180, 40), 30, UDim2.new(0, 12, 0, 8))
     
     Utils.create('TextLabel', {
         Size = UDim2.new(0, 200, 0, 16),
@@ -641,7 +655,7 @@ function BossesTab.init()
         Position = UDim2.new(0, 12, 0, 70),
         BackgroundColor3 = Color3.fromRGB(180, 80, 30),
         BorderSizePixel = 0,
-        Text = '🔄  RESTART SERVER NOW',
+        Text = '\xF0\x9F\x94\x84  RESTART SERVER NOW',
         TextColor3 = Color3.new(1, 1, 1),
         TextSize = 12,
         Font = Enum.Font.GothamBold,
@@ -654,12 +668,12 @@ function BossesTab.init()
     
     manualRestartBtn.MouseButton1Click:Connect(function()
         if not bosses then return end
-        manualRestartBtn.Text = '🔄  Restarting...'
+        manualRestartBtn.Text = '\xF0\x9F\x94\x84  Restarting...'
         manualRestartBtn.BackgroundColor3 = Color3.fromRGB(120, 60, 20)
         task.spawn(function()
             bosses.restartCurrentServer(function()
                 task.delay(3, function()
-                    manualRestartBtn.Text = '🔄  RESTART SERVER NOW'
+                    manualRestartBtn.Text = '\xF0\x9F\x94\x84  RESTART SERVER NOW'
                     manualRestartBtn.BackgroundColor3 = Color3.fromRGB(180, 80, 30)
                 end)
             end)
@@ -704,7 +718,7 @@ function BossesTab.init()
         Size = UDim2.new(0, 50, 0, 16),
         Position = UDim2.new(0, 12, 0, 26),
         BackgroundTransparency = 1,
-        Text = '💀 Boss:',
+        Text = '\xF0\x9F\x92\x80 Boss:',
         TextColor3 = Color3.fromRGB(255, 100, 100),
         TextSize = 12,
         Font = Enum.Font.GothamBold,
@@ -730,7 +744,7 @@ function BossesTab.init()
         Size = UDim2.new(0, 50, 0, 16),
         Position = UDim2.new(0, 12, 0, 46),
         BackgroundTransparency = 1,
-        Text = '👼 Angel:',
+        Text = '\xF0\x9F\x91\xBC Angel:',
         TextColor3 = Color3.fromRGB(80, 160, 255),
         TextSize = 12,
         Font = Enum.Font.GothamBold,
@@ -845,7 +859,7 @@ function BossesTab.init()
             Position = UDim2.new(1, -132, 0.5, -11),
             BackgroundColor3 = Color3.fromRGB(180, 60, 60),
             BorderSizePixel = 0,
-            Text = '💀 Boss',
+            Text = '\xF0\x9F\x92\x80 Boss',
             TextColor3 = Color3.new(1, 1, 1),
             TextSize = 12,
             Font = Enum.Font.GothamBold,
@@ -859,7 +873,7 @@ function BossesTab.init()
             Position = UDim2.new(1, -66, 0.5, -11),
             BackgroundColor3 = Color3.fromRGB(60, 120, 180),
             BorderSizePixel = 0,
-            Text = '👼 Angel',
+            Text = '\xF0\x9F\x91\xBC Angel',
             TextColor3 = Color3.new(1, 1, 1),
             TextSize = 12,
             Font = Enum.Font.GothamBold,
