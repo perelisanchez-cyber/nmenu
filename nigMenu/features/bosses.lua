@@ -57,73 +57,6 @@ Bosses.loaderCode = ""
 Bosses.managerUrl = "http://localhost:8080"
 Bosses.hopMethod = "G"
 
--- ============================================================================
--- FARM STATE PERSISTENCE
--- ============================================================================
--- Saves farm settings to a local file so the farm auto-resumes after
--- a server restart + relaunch cycle. Written when farm starts or restarts,
--- cleared when farm is manually stopped.
-
-Bosses.farmStateFile = "nigMenu_farmState.json"
-
-function Bosses.saveFarmState()
-    if not writefile then return false end
-    local ok = pcall(function()
-        local HttpService = game:GetService("HttpService")
-        local state = {
-            farmEnabled     = true,
-            farmBosses      = Bosses.farmBosses,
-            farmAngels      = Bosses.farmAngels,
-            farmMinWorld    = Bosses.farmMinWorld,
-            farmMaxWorld    = Bosses.farmMaxWorld,
-            travelTime      = Bosses.travelTime,
-            autoRestartOnKill = Bosses.autoRestartOnKill,
-            currentServerIndex = Bosses.currentServerIndex,
-            hopMethod       = Bosses.hopMethod,
-            privateServerOnly = Bosses.privateServerOnly,
-            forcedServerKey = Bosses.forcedServerKey,
-        }
-        writefile(Bosses.farmStateFile, HttpService:JSONEncode(state))
-    end)
-    return ok
-end
-
-function Bosses.loadFarmState()
-    if not isfile or not readfile then return nil end
-    if not isfile(Bosses.farmStateFile) then return nil end
-    local ok, data = pcall(function()
-        local HttpService = game:GetService("HttpService")
-        return HttpService:JSONDecode(readfile(Bosses.farmStateFile))
-    end)
-    if ok and data then return data end
-    return nil
-end
-
-function Bosses.clearFarmState()
-    if not delfile then
-        -- Fallback: overwrite with empty object
-        if writefile then
-            pcall(function() writefile(Bosses.farmStateFile, "{}") end)
-        end
-        return
-    end
-    pcall(function() delfile(Bosses.farmStateFile) end)
-end
-
-function Bosses.applyFarmState(state)
-    if not state then return end
-    if state.farmBosses ~= nil then Bosses.farmBosses = state.farmBosses end
-    if state.farmAngels ~= nil then Bosses.farmAngels = state.farmAngels end
-    if state.farmMinWorld then Bosses.farmMinWorld = state.farmMinWorld end
-    if state.farmMaxWorld then Bosses.farmMaxWorld = state.farmMaxWorld end
-    if state.travelTime then Bosses.travelTime = state.travelTime end
-    if state.autoRestartOnKill ~= nil then Bosses.autoRestartOnKill = state.autoRestartOnKill end
-    if state.currentServerIndex then Bosses.currentServerIndex = state.currentServerIndex end
-    if state.hopMethod then Bosses.hopMethod = state.hopMethod end
-    if state.privateServerOnly ~= nil then Bosses.privateServerOnly = state.privateServerOnly end
-    if state.forcedServerKey then Bosses.forcedServerKey = state.forcedServerKey end
-end
-
 --[[
     Send restart command to roblox_manager.py
     POST /restart/<serverKey> with {gameId: game.JobId, delay: 5}
@@ -339,7 +272,6 @@ end
 -- ============================================================================
 -- BOSS DATA
 -- ============================================================================
-
 Bosses.Data = {
     { world = 1,  spawn = "Sacred Forest",        bossEvent = "RainHard_BossEvent",         boss = Vector3.new(1340.9, 161.7, -314.7),       angel = Vector3.new(1454.6, 160.8, -129.2) },
     { world = 2,  spawn = "Goblins Caves",       bossEvent = "Shaman_BossEvent",           boss = Vector3.new(26059.3, 115.6, 6472.7),      angel = Vector3.new(25973.1, 130.5, 6560.8) },
@@ -372,6 +304,7 @@ Bosses.Data = {
     { world = 29, spawn = "Shield Kingdom",          bossEvent = "Cerberus_BossEvent",         boss = Vector3.new(-25437.0, 1448.7, 653.6),     angel = Vector3.new(-25245.8, 1493.0, 682.4) },
     { world = 30, spawn = "Alchemy City",          bossEvent = "Ogre_BossEvent",             boss = Vector3.new(-23289.7, 1399.7, -3520.9),   angel = Vector3.new(-24201.1, 1400.2, -4002.1) },
 }
+
 
 -- ============================================================================
 -- EVENT SYSTEM
@@ -497,6 +430,199 @@ function Bosses.debugEvents()
     log("")
     log("====== END ======")
     return events
+end
+
+-- ============================================================================
+-- NEXT SPAWN PREDICTION
+-- ============================================================================
+
+--[[
+    Scans ALL events in EventManagerShared to find the next upcoming
+    boss and angel spawn times. Uses the startTime/endTime attributes
+    that the game's event system already tracks.
+    
+    Prints to console:
+      - Currently active bosses/angels (with time remaining)
+      - Next upcoming boss spawn (with countdown)
+      - Next upcoming angel spawn (with countdown)
+      - Full schedule of upcoming spawns within the next hour
+]]
+function Bosses.debugNextSpawn()
+    local NM = getNM()
+    local con = NM and NM.Features and NM.Features.console
+    local function log(msg)
+        if con then con.log(msg) else print(msg) end
+    end
+    if con then con.clear(); con.show() end
+    
+    local events = Bosses.getAllEvents()
+    local now = workspace:GetServerTimeNow()
+    
+    log("====== NEXT SPAWN TIMES ======")
+    log("Server time: " .. string.format("%.1f", now))
+    log("")
+    
+    -- Categorize all events
+    local activeBosses = {}
+    local activeAngels = {}
+    local upcomingBosses = {}
+    local upcomingAngels = {}
+    
+    for _, event in ipairs(events) do
+        pcall(function()
+            local name = event.Name
+            local isActive = event.Value
+            local startT = event:GetAttribute("startTime")
+            local endT = event:GetAttribute("endTime")
+            
+            -- Determine type
+            local isAngel = name:find("BossAngel_") ~= nil
+            local isBoss = not isAngel and name:find("_BossEvent") ~= nil
+            if not isAngel and not isBoss then return end
+            
+            -- Get a friendly name
+            local friendly = name:gsub("_BossEvent", "")
+            if isAngel then
+                local worldNum = name:match("BossAngel_(%d+)")
+                if worldNum then
+                    local wn = tonumber(worldNum)
+                    local data = Bosses.Data[wn]
+                    friendly = "Angel W" .. worldNum .. (data and (" " .. data.spawn) or "")
+                end
+            else
+                -- Map boss event name to world
+                for _, data in ipairs(Bosses.Data) do
+                    if data.bossEvent == name then
+                        friendly = friendly .. " (W" .. data.world .. " " .. data.spawn .. ")"
+                        break
+                    end
+                end
+            end
+            
+            local entry = {
+                name = name,
+                friendly = friendly,
+                isActive = isActive,
+                startTime = startT,
+                endTime = endT,
+                isAngel = isAngel,
+            }
+            
+            if isActive then
+                -- Currently active
+                if isAngel then
+                    table.insert(activeAngels, entry)
+                else
+                    table.insert(activeBosses, entry)
+                end
+            elseif startT and startT > now then
+                -- Upcoming (future start time)
+                if isAngel then
+                    table.insert(upcomingAngels, entry)
+                else
+                    table.insert(upcomingBosses, entry)
+                end
+            end
+        end)
+    end
+    
+    -- Sort upcoming by startTime (soonest first)
+    table.sort(upcomingBosses, function(a, b) return (a.startTime or 0) < (b.startTime or 0) end)
+    table.sort(upcomingAngels, function(a, b) return (a.startTime or 0) < (b.startTime or 0) end)
+    
+    -- ================================================================
+    -- ACTIVE RIGHT NOW
+    -- ================================================================
+    
+    log("--- ACTIVE NOW ---")
+    
+    if #activeBosses == 0 and #activeAngels == 0 then
+        log("  (none)")
+    end
+    
+    for _, e in ipairs(activeBosses) do
+        local remaining = e.endTime and (e.endTime - now) or nil
+        local remStr = remaining and Bosses.formatTime(remaining) or "?"
+        log(string.format("  BOSS  %-40s ends in %s", e.friendly, remStr))
+    end
+    
+    for _, e in ipairs(activeAngels) do
+        local remaining = e.endTime and (e.endTime - now) or nil
+        local remStr = remaining and Bosses.formatTime(remaining) or "?"
+        log(string.format("  ANGEL %-40s ends in %s", e.friendly, remStr))
+    end
+    
+    log("")
+    
+    -- ================================================================
+    -- NEXT SPAWNS
+    -- ================================================================
+    
+    log("--- NEXT BOSS ---")
+    if #upcomingBosses > 0 then
+        local next = upcomingBosses[1]
+        local countdown = next.startTime - now
+        log(string.format("  >> %s", next.friendly))
+        log(string.format("     Spawns in: %s", Bosses.formatTime(countdown)))
+    else
+        log("  No upcoming boss events found")
+    end
+    
+    log("")
+    
+    log("--- NEXT ANGEL ---")
+    if #upcomingAngels > 0 then
+        local next = upcomingAngels[1]
+        local countdown = next.startTime - now
+        log(string.format("  >> %s", next.friendly))
+        log(string.format("     Spawns in: %s", Bosses.formatTime(countdown)))
+    else
+        log("  No upcoming angel events found")
+    end
+    
+    log("")
+    
+    -- ================================================================
+    -- UPCOMING (next hour)
+    -- ================================================================
+    
+    log("--- ALL UPCOMING (next 60 min) ---")
+    
+    local allUpcoming = {}
+    for _, e in ipairs(upcomingBosses) do
+        if e.startTime and (e.startTime - now) <= 3600 then
+            e._type = "BOSS"
+            table.insert(allUpcoming, e)
+        end
+    end
+    for _, e in ipairs(upcomingAngels) do
+        if e.startTime and (e.startTime - now) <= 3600 then
+            e._type = "ANGEL"
+            table.insert(allUpcoming, e)
+        end
+    end
+    
+    table.sort(allUpcoming, function(a, b) return (a.startTime or 0) < (b.startTime or 0) end)
+    
+    if #allUpcoming == 0 then
+        log("  (none within 60 min)")
+    else
+        for _, e in ipairs(allUpcoming) do
+            local countdown = e.startTime - now
+            log(string.format("  %s  %-40s in %s", e._type, e.friendly, Bosses.formatTime(countdown)))
+        end
+    end
+    
+    log("")
+    log("====== END ======")
+    
+    -- Return useful data for programmatic use
+    return {
+        activeBosses = activeBosses,
+        activeAngels = activeAngels,
+        nextBoss = upcomingBosses[1],
+        nextAngel = upcomingAngels[1],
+    }
 end
 
 -- ============================================================================
@@ -776,9 +902,6 @@ function Bosses.startFarmLoop()
     Bosses.farmEnabled = true
     Bosses.kills = 0
     
-    -- Persist farm state so it survives restart + relaunch
-    Bosses.saveFarmState()
-    
     -- Start heartbeat so manager tracks our players
     Bosses.startHeartbeat()
     
@@ -934,8 +1057,6 @@ function Bosses.stopFarmLoop()
     Bosses.farmEnabled = false
     Bosses.heartbeatRunning = false
     Bosses.status = "Stopping..."
-    -- Clear saved state so it doesn't auto-resume next time
-    Bosses.clearFarmState()
 end
 
 -- ============================================================================
@@ -943,21 +1064,12 @@ end
 -- ============================================================================
 
 function Bosses.checkAutoStart()
-    local NM = getNM()
-    local con = NM and NM.Features and NM.Features.console
-    local function log(msg)
-        if con then con.log(msg) else print("[BossFarm] " .. msg) end
-    end
-
-    -- Check for saved farm state (from a restart + relaunch cycle)
-    local savedState = Bosses.loadFarmState()
-    if savedState and savedState.farmEnabled then
-        log("Saved farm state found — restoring settings and resuming...")
-        Bosses.applyFarmState(savedState)
-        Bosses.autoFarmOnJoin = true
-    end
-
     if Bosses.autoFarmOnJoin then
+        local NM = getNM()
+        local con = NM and NM.Features and NM.Features.console
+        local function log(msg)
+            if con then con.log(msg) else print("[BossFarm] " .. msg) end
+        end
         log("autoFarmOnJoin enabled - starting farm in 5s...")
         Bosses.status = "Auto-starting farm in 5s..."
         task.delay(5, function()
@@ -970,3 +1082,4 @@ function Bosses.checkAutoStart()
 end
 
 return Bosses
+
