@@ -16,7 +16,7 @@
           tabs/auto_tab.lua, bosses_tab.lua, ...
 ]]
 
-local RAW_BASE = "https://raw.githubusercontent.com/perelisanchez-cyber/nmenu/main/nigMenu/"
+local RAW_BASE = "https://raw.githubusercontent.com/perelisanchez-cyber/nmenu/claude/github-integration-exploration-DKPUS/nigMenu/"
 
 -- ============================================================================
 -- SINGLE INSTANCE CHECK
@@ -154,6 +154,7 @@ for _, t in ipairs({
     { f = "server_tab.lua",   n = "ServerHopper" },
     { f = "utils_tab.lua",    n = "Utils" },
     { f = "config_tab.lua",   n = "Config" },
+    { f = "changelog_tab.lua", n = "Changelog" },
 }) do
     local m = fetch("tabs/" .. t.f)
     if m then

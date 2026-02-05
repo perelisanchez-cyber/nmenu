@@ -19,6 +19,14 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.3",
+        date = "2026-02-05",
+        entries = {
+            { type = "changed", text = "GitHub loader now pulls from dev branch" },
+            { type = "added", text = "Changelog tab included in github_loader.lua" },
+        }
+    },
+    {
         version = "1.0.2",
         date = "2026-02-05",
         entries = {
