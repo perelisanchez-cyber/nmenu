@@ -363,7 +363,7 @@ function BossesTab.init()
         Position = UDim2.new(0, 305, 0, rangeY + 1),
         BackgroundColor3 = T.CardHover,
         BorderSizePixel = 0,
-        Text = '⏱ Next Spawn',
+        Text = 'Next Spawn',
         TextColor3 = T.TextMuted,
         TextSize = 11,
         Font = Enum.Font.Gotham,
