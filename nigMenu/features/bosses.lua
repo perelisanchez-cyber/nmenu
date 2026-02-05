@@ -808,36 +808,106 @@ end
 -- AUTO-FARM LOOP (with manager restart integration)
 -- ============================================================================
 
-function Bosses.buildTargetList(skipSet)
-    -- Build list of all worlds in range (no event checks).
-    -- The farm loop will physically visit each world and check for NPCs.
-    local targets = {}
-    skipSet = skipSet or {}
-    for i = Bosses.farmMinWorld, Bosses.farmMaxWorld do
-        local data = Bosses.Data[i]
-        if data and not skipSet[i] then
-            table.insert(targets, {
-                world = i,
-                spawn = data.spawn,
-                bossCoords = data.boss,
-                angelCoords = data.angel,
-                bossName = data.bossEvent:gsub("_BossEvent", ""),
-            })
-        end
+function Bosses.buildTargetList()
+    --[[
+        Scan workspace.Client.Enemies.WorldBoss for alive NPC models.
+        No teleporting needed — this folder contains bosses across ALL worlds.
+        Returns only confirmed-alive targets within [farmMinWorld..farmMaxWorld].
+    ]]
+    local folder = getWorldBossFolder()
+    if not folder then return {} end
+
+    -- Boss name (lowercase) → world data lookup
+    local bossLookup = {}
+    for _, data in ipairs(Bosses.Data) do
+        local name = data.bossEvent:gsub("_BossEvent", ""):lower()
+        bossLookup[name] = data
     end
+
+    local targets = {}
+
+    pcall(function()
+        for _, model in ipairs(folder:GetChildren()) do
+            for _, desc in ipairs(model:GetDescendants()) do
+                if desc:IsA("BillboardGui") then
+                    local nameLabel = nil
+                    for _, child in ipairs(desc:GetDescendants()) do
+                        if child:IsA("TextLabel") and child.Name == "EnemyName" then
+                            nameLabel = child
+                            break
+                        end
+                    end
+                    if nameLabel then
+                        local hp, maxhp = parseHP(desc)
+                        if hp > 0 then
+                            local nameL = nameLabel.Text:lower()
+
+                            if nameL:find("angel") then
+                                -- Angel — determine world by matching position to known coords
+                                if Bosses.farmAngels then
+                                    local pos = nil
+                                    pcall(function()
+                                        if model.PrimaryPart then
+                                            pos = model.PrimaryPart.Position
+                                        else
+                                            pos = model:GetPivot().Position
+                                        end
+                                    end)
+                                    if pos then
+                                        local best, bestDist = nil, math.huge
+                                        for _, d in ipairs(Bosses.Data) do
+                                            local dist = (pos - d.angel).Magnitude
+                                            if dist < bestDist then
+                                                bestDist = dist
+                                                best = d
+                                            end
+                                        end
+                                        if best and best.world >= Bosses.farmMinWorld and best.world <= Bosses.farmMaxWorld then
+                                            table.insert(targets, {
+                                                world = best.world, type = "Angel",
+                                                bossName = "Boss Angel",
+                                                coords = best.angel, spawn = best.spawn,
+                                            })
+                                        end
+                                    end
+                                end
+                            else
+                                -- Boss — match by name
+                                if Bosses.farmBosses then
+                                    for key, data in pairs(bossLookup) do
+                                        if nameL:find(key) then
+                                            if data.world >= Bosses.farmMinWorld and data.world <= Bosses.farmMaxWorld then
+                                                table.insert(targets, {
+                                                    world = data.world, type = "Boss",
+                                                    bossName = data.bossEvent:gsub("_BossEvent", ""),
+                                                    coords = data.boss, spawn = data.spawn,
+                                                })
+                                            end
+                                            break
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    table.sort(targets, function(a, b) return a.world < b.world end)
     return targets
 end
 
 --[[
-    Main farm loop — NPC-based scanning.
+    Main farm loop — workspace-based detection.
 
     FLOW:
-    1. Cycle through every world in [farmMinWorld..farmMaxWorld]
-    2. Teleport to the world, wait for workspace to load
-    3. Check workspace.Client.Enemies.WorldBoss for actual NPC models
-    4. If boss/angel NPC found → farm until dead (NPC gone for 5s)
-    5. After full scan cycle: if kills happened + autoRestartOnKill → restart
-    6. Otherwise loop back for another scan
+    1. Scan workspace.Client.Enemies.WorldBoss for alive NPC models (instant, no TP)
+    2. If alive target found → teleport to its world → farm until dead
+    3. After kill → rescan immediately for more targets
+    4. If no alive targets → wait a few seconds → rescan
+    5. If autoRestartOnKill and nothing left after kills → restart server
 ]]
 function Bosses.startFarmLoop()
     local Config = getConfig()
@@ -846,7 +916,6 @@ function Bosses.startFarmLoop()
     Bosses.farmEnabled = true
     Bosses.kills = 0
 
-    -- Start heartbeat so manager tracks our players
     Bosses.startHeartbeat()
 
     local DRIFT_RADIUS = 50
@@ -857,7 +926,7 @@ function Bosses.startFarmLoop()
         if con then con.log(msg) else print("[BossFarm] " .. msg) end
     end
 
-    -- Helper: stay at target and farm until NPC disappears for 5 consecutive checks
+    -- Stay at target and farm until NPC disappears for 5 consecutive checks
     local function farmNPC(worldNum, npcType, npcName, coords)
         Bosses.currentTarget = {
             world = worldNum, type = npcType,
@@ -883,7 +952,6 @@ function Bosses.startFarmLoop()
                 end
             end
 
-            -- Reposition if drifted
             pcall(function()
                 local hrp = Config.LocalPlayer.Character
                     and Config.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -898,94 +966,73 @@ function Bosses.startFarmLoop()
     end
 
     task.spawn(function()
-        -- Check server enforcement first
         if Bosses.checkServerEnforcement() then
             log("Server enforcement triggered - waiting for relaunch...")
             return
         end
 
         while Bosses.farmEnabled and Config.State.running do
-            local killsThisCycle = 0
+            -- Scan workspace for alive NPCs (instant, no teleport)
+            Bosses.status = "Scanning for alive bosses..."
+            Bosses.currentTarget = nil
 
-            for i = Bosses.farmMinWorld, Bosses.farmMaxWorld do
+            local targets = Bosses.buildTargetList()
+
+            if #targets == 0 then
+                Bosses.status = "No bosses alive, waiting..."
+                task.wait(5)
+                continue
+            end
+
+            log("Found " .. #targets .. " alive target(s)")
+
+            for _, target in ipairs(targets) do
                 if not Bosses.farmEnabled or not Config.State.running then break end
 
-                local data = Bosses.Data[i]
-                if not data then continue end
-                if not Bosses.farmBosses and not Bosses.farmAngels then continue end
+                Bosses.status = "TP -> W" .. target.world .. " " .. target.type .. " (" .. target.spawn .. ")"
+                log("Teleporting to W" .. target.world .. " " .. target.type)
 
-                -- Teleport to this world (lands at boss coords)
-                Bosses.status = "Scanning W" .. i .. " (" .. data.spawn .. ")..."
-                Bosses.currentTarget = nil
-                log("Scanning W" .. i .. " " .. data.spawn)
-
-                local success = Bosses.teleportAndWait(i, data.boss)
+                local success = Bosses.teleportAndWait(target.world, target.coords)
                 if not success then
-                    log("TP to W" .. i .. " failed, skipping")
+                    log("TP to W" .. target.world .. " failed, skipping")
                     continue
                 end
 
-                -- Extra settle time for WorldBoss folder to populate
+                -- Brief settle after TP
                 task.wait(2)
-                if not Bosses.farmEnabled or not Config.State.running then break end
 
-                -- Check for boss NPC
-                if Bosses.farmBosses then
-                    local bossName = data.bossEvent:gsub("_BossEvent", "")
-                    local npc, hp = Bosses.findWorldBossNPC(bossName)
-                    if npc and hp > 0 then
-                        if farmNPC(i, "Boss", bossName, data.boss) then
-                            killsThisCycle = killsThisCycle + 1
-                        end
-                        task.wait(2)
-                        if not Bosses.farmEnabled or not Config.State.running then break end
-                    end
-                end
-
-                -- Check for angel NPC (reposition to angel coords first)
-                if Bosses.farmAngels then
-                    pcall(function()
-                        local hrp = Config.LocalPlayer.Character
-                            and Config.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                        if hrp then hrp.CFrame = CFrame.new(data.angel) end
-                    end)
-                    task.wait(1)
-
-                    local npc, hp = Bosses.findWorldBossNPC("Boss Angel")
-                    if npc and hp > 0 then
-                        if farmNPC(i, "Angel", "Boss Angel", data.angel) then
-                            killsThisCycle = killsThisCycle + 1
-                        end
-                        task.wait(2)
-                        if not Bosses.farmEnabled or not Config.State.running then break end
-                    end
+                -- Verify NPC is still alive after arriving
+                local npc, hp = Bosses.findWorldBossNPC(target.bossName)
+                if npc and hp > 0 then
+                    farmNPC(target.world, target.type, target.bossName, target.coords)
+                    task.wait(2)
+                else
+                    log("W" .. target.world .. " " .. target.type .. " gone by the time we arrived")
                 end
             end
 
-            -- ==============================================================
-            -- CYCLE COMPLETE
-            -- ==============================================================
             if not Bosses.farmEnabled or not Config.State.running then break end
 
-            if killsThisCycle > 0 and Bosses.autoRestartOnKill then
-                log("Scan cycle done with " .. killsThisCycle .. " kills - RESTARTING SERVER!")
-                Bosses.status = "All scanned -> Restarting server..."
-                task.wait(2)
+            -- After processing targets: restart check
+            if Bosses.kills > 0 and Bosses.autoRestartOnKill then
+                local remaining = Bosses.buildTargetList()
+                if #remaining == 0 then
+                    log("All targets dead - RESTARTING SERVER!")
+                    Bosses.status = "All dead -> Restarting server..."
+                    task.wait(2)
 
-                local server = Bosses.servers[Bosses.currentServerIndex]
-                Bosses.restartServer(server and server.key or "farm")
+                    local server = Bosses.servers[Bosses.currentServerIndex]
+                    Bosses.restartServer(server and server.key or "farm")
 
-                Bosses.status = "Waiting for relaunch..."
-                log("Waiting for manager to kill+relaunch...")
-                task.wait(60)
-                Bosses.farmEnabled = false
-                return
+                    Bosses.status = "Waiting for relaunch..."
+                    log("Waiting for manager to kill+relaunch...")
+                    task.wait(60)
+                    Bosses.farmEnabled = false
+                    return
+                end
             end
 
-            Bosses.status = "Scan complete, rescanning..."
-            Bosses.currentTarget = nil
-            log("Full scan done (" .. killsThisCycle .. " kills), restarting cycle")
-            task.wait(5)
+            task.wait(3)
         end
 
         Bosses.status = "Idle"
