@@ -133,41 +133,18 @@ function Bosses.checkServerEnforcement()
             if con then con.log(msg) else print(msg) end
         end
 
-        log("SERVER ENFORCEMENT: In public server! Relaunching to " .. Bosses.forcedServerKey)
-        Bosses.status = "Wrong server - relaunching..."
+        log("SERVER ENFORCEMENT: In public server! Asking manager to relaunch to " .. Bosses.forcedServerKey)
+        Bosses.status = "Wrong server - relaunching via manager..."
 
-        -- Try direct teleport to the correct private server first
-        local teleported = false
         pcall(function()
-            local server = nil
-            for _, s in ipairs(Bosses.servers) do
-                if s.key == Bosses.forcedServerKey then
-                    server = s
-                    break
-                end
-            end
-            if server then
-                local TS = game:GetService("TeleportService")
-                local Config = getConfig()
-                if Config and Config.LocalPlayer then
-                    TS:TeleportToPrivateServer(game.PlaceId, server.joinCode, {Config.LocalPlayer})
-                    teleported = true
-                end
-            end
+            local HttpService = game:GetService("HttpService")
+            request({
+                Url = Bosses.managerUrl .. "/restart/" .. Bosses.forcedServerKey,
+                Method = "POST",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = HttpService:JSONEncode({ delay = 3 }),
+            })
         end)
-
-        -- Fallback: ask manager to restart if direct TP failed
-        if not teleported then
-            pcall(function()
-                local HttpService = game:GetService("HttpService")
-                request({
-                    Url = Bosses.managerUrl .. "/restart/" .. Bosses.forcedServerKey,
-                    Method = "POST",
-                    Headers = { ["Content-Type"] = "application/json" },
-                    Body = HttpService:JSONEncode({ delay = 3 }),
-                })
-            end)
-        end
 
         return true
     end

@@ -22,8 +22,7 @@ local changelog = {
         version = "1.0.9",
         date = "2026-02-05",
         entries = {
-            { type = "fixed", text = "Server enforcement enabled by default — accounts in public servers auto-teleport to Farm Server" },
-            { type = "changed", text = "Enforcement now tries direct TeleportToPrivateServer first, falls back to manager restart" },
+            { type = "fixed", text = "Server enforcement enabled by default — accounts in public servers auto-relaunch via manager" },
             { type = "added", text = "Boot-time server check runs before farm starts (via checkAutoStart)" },
             { type = "fixed", text = "TP to boss/angel now adds +5 Z offset so you don't spawn directly under the NPC" },
         }
