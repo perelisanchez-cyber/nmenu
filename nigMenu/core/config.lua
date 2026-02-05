@@ -79,19 +79,19 @@ Config.Constants = {
     
     -- Accessory systems (all use "ItemSystem" > "Buy" with typeName)
     ACCESSORY_SYSTEMS = {
-        { name = 'Eye',   typeName = 'Eyes',   target = 'Omniscient Eye',   icon = '👁️', color = Color3.fromRGB(255, 100, 100) },
-        { name = 'Fruit', typeName = 'Fruits', target = 'Singularity Fruit', icon = '🍎', color = Color3.fromRGB(100, 255, 100) },
-        { name = 'Quirk', typeName = 'Quirks', target = 'Ascendant Quirk',   icon = '⚡', color = Color3.fromRGB(100, 150, 255) },
-        { name = 'Gene',  typeName = 'Genes',  target = 'Progenitor Gene',   icon = '🧬', color = Color3.fromRGB(255, 200, 100) }
+        { name = 'Eye',   typeName = 'Eyes',   target = 'Omniscient Eye',   icon = 'ðŸ‘ï¸', color = Color3.fromRGB(255, 100, 100) },
+        { name = 'Fruit', typeName = 'Fruits', target = 'Singularity Fruit', icon = 'ðŸŽ', color = Color3.fromRGB(100, 255, 100) },
+        { name = 'Quirk', typeName = 'Quirks', target = 'Ascendant Quirk',   icon = 'âš¡', color = Color3.fromRGB(100, 150, 255) },
+        { name = 'Gene',  typeName = 'Genes',  target = 'Progenitor Gene',   icon = 'ðŸ§¬', color = Color3.fromRGB(255, 200, 100) }
     },
     
     -- Prestige levels for pet merging
     PRESTIGE_DATA = {
         { name = 'Normal', color = Color3.fromRGB(180, 180, 180), icon = '' },
-        { name = 'Shade',  color = Color3.fromRGB(130, 100, 200), icon = '⭐' },
-        { name = 'Shiny',  color = Color3.fromRGB(255, 220, 100), icon = '⭐⭐' },
-        { name = 'Dark',   color = Color3.fromRGB(80, 80, 120),   icon = '⭐⭐⭐' },
-        { name = 'Darker', color = Color3.fromRGB(50, 0, 80),     icon = '⭐⭐⭐⭐' }
+        { name = 'Shade',  color = Color3.fromRGB(130, 100, 200), icon = 'â­' },
+        { name = 'Shiny',  color = Color3.fromRGB(255, 220, 100), icon = 'â­â­' },
+        { name = 'Dark',   color = Color3.fromRGB(80, 80, 120),   icon = 'â­â­â­' },
+        { name = 'Darker', color = Color3.fromRGB(50, 0, 80),     icon = 'â­â­â­â­' }
     },
     
     -- Merge requirements
@@ -261,7 +261,10 @@ Config.Toggles = {
     starAutoMergeSettings = {
         enabled = false,
         maxPrestige = "Darker"
-    }
+    },
+    
+    -- Boss tab toggles (persisted across re-inject)
+    bossToggles = nil
 }
 
 -- Initialize raid loops
