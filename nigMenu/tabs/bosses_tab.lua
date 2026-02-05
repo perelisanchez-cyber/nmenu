@@ -10,6 +10,7 @@
     - Dwell time config
     - Live status display
     - Manual TP buttons per world
+    - Per-world spawn timers inline
 ]]
 
 local BossesTab = {}
@@ -24,6 +25,9 @@ local statusLabel = nil
 local killsLabel = nil
 local playersLabel = nil
 local statusUpdateRunning = false
+
+-- Per-world timer labels: worldTimerLabels[worldNum] = TextLabel
+local worldTimerLabels = {}
 
 -- ============================================================================
 -- STATUS UPDATE LOOP
@@ -64,6 +68,57 @@ local function startStatusLoop()
                 else
                     playersLabel.Text = playerCount .. " in server"
                     playersLabel.TextColor3 = Color3.fromRGB(120, 200, 120)
+                end
+            end
+            
+            -- ============================================================
+            -- PER-WORLD TIMER UPDATES
+            -- ============================================================
+            if bosses then
+                local now = nil
+                pcall(function() now = workspace:GetServerTimeNow() end)
+                
+                for worldNum, lbl in pairs(worldTimerLabels) do
+                    if not lbl or not lbl.Parent then continue end
+                    
+                    pcall(function()
+                        local bossActive, bossInfo = bosses.isBossActive(worldNum)
+                        local angelActive, angelInfo = bosses.isAngelActive(worldNum)
+                        
+                        local bStr = "--:--"
+                        local aStr = "--:--"
+                        
+                        if bossActive == true then
+                            bStr = "ALIVE"
+                        elseif bossInfo and bossInfo.startTime and now then
+                            local remaining = bossInfo.startTime - now
+                            if remaining > 0 then
+                                bStr = bosses.formatTime(remaining)
+                            else
+                                bStr = "ALIVE"
+                            end
+                        end
+                        
+                        if angelActive == true then
+                            aStr = "ALIVE"
+                        elseif angelInfo and angelInfo.startTime and now then
+                            local remaining = angelInfo.startTime - now
+                            if remaining > 0 then
+                                aStr = bosses.formatTime(remaining)
+                            else
+                                aStr = "ALIVE"
+                            end
+                        end
+                        
+                        lbl.Text = "\xF0\x9F\x92\x80 " .. bStr .. "  \xF0\x9F\x91\xBC " .. aStr
+                        
+                        -- Green if either is alive, muted otherwise
+                        if bossActive == true or angelActive == true then
+                            lbl.TextColor3 = Color3.fromRGB(80, 255, 80)
+                        else
+                            lbl.TextColor3 = Color3.fromRGB(130, 130, 140)
+                        end
+                    end)
                 end
             end
             
@@ -710,13 +765,16 @@ function BossesTab.init()
     yOffset = yOffset + 34
     
     -- ========================================================================
-    -- WORLD ROWS
+    -- WORLD ROWS (with inline spawn timers)
     -- ========================================================================
     
     local bossData = bosses and bosses.Data
     if not bossData then return end
     
     local rowHeight = 32
+    
+    -- Reset world timer labels for fresh build
+    worldTimerLabels = {}
     
     for i, data in ipairs(bossData) do
         local worldNum = data.world
@@ -741,8 +799,9 @@ function BossesTab.init()
             worldColor = Color3.fromRGB(100, 180, 255)
         end
         
+        -- World name (narrower to fit inline timers)
         Utils.create('TextLabel', {
-            Size = UDim2.new(1, -160, 1, 0),
+            Size = UDim2.new(0, 120, 1, 0),
             Position = UDim2.new(0, 8, 0, 0),
             BackgroundTransparency = 1,
             Text = worldNum .. '. ' .. data.spawn,
@@ -753,6 +812,22 @@ function BossesTab.init()
             TextTruncate = Enum.TextTruncate.AtEnd,
             Parent = row
         })
+        
+        -- Inline spawn timer: 💀 X:XX  👼 X:XX
+        local timerLbl = Utils.create('TextLabel', {
+            Size = UDim2.new(0, 110, 1, 0),
+            Position = UDim2.new(0, 130, 0, 0),
+            BackgroundTransparency = 1,
+            Text = '\xF0\x9F\x92\x80 --:--  \xF0\x9F\x91\xBC --:--',
+            TextColor3 = T.TextMuted,
+            TextSize = 10,
+            Font = Enum.Font.Gotham,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            Parent = row
+        })
+        
+        worldTimerLabels[worldNum] = timerLbl
         
         -- Boss button
         local bossBtn = Utils.create('TextButton', {
