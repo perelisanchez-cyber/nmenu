@@ -1372,6 +1372,24 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             self._respond(200, manager.get_missing_accounts(parts[1]))
             return
 
+        # GET /my-server/<username> -- which server should this account use?
+        # Lua calls this at boot to find out what server to enforce
+        if len(parts) >= 2 and parts[0] == "my-server":
+            username = parts[1]
+            # Look up account by username (Lua sends LocalPlayer.Name)
+            found_key = ""
+            for acc_name, acc_data in manager.accounts.items():
+                if acc_data.get("username", "").lower() == username.lower() or acc_name.lower() == username.lower():
+                    found_key = manager.get_default_server(acc_name)
+                    break
+            server_info = SERVERS.get(found_key, {})
+            self._respond(200, {
+                "server_key": found_key,
+                "server_name": server_info.get("name", ""),
+                "link_code": server_info.get("link_code", ""),
+            })
+            return
+
         self._respond(200, {"info": "Roblox Manager API", "servers": list(SERVERS.keys())})
 
     def do_POST(self):
@@ -1497,10 +1515,11 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                 print(f"[RESTART] Waiting {actual_delay}s for server to clear (shutdown_ok={shutdown_ok})...")
                 time.sleep(actual_delay)
 
-                # Relaunch all accounts
+                # Relaunch all accounts (respecting per-account default server)
                 for acc_name in relaunch_accounts:
-                    result = manager.launch_instance(acc_name, server_key)
-                    print(f"[RESTART] Relaunched {acc_name} â†’ {server_key}: {result}")
+                    acc_server = manager.get_default_server(acc_name) or server_key
+                    result = manager.launch_instance(acc_name, acc_server)
+                    print(f"[RESTART] Relaunched {acc_name} -> {acc_server}: {result}")
                     time.sleep(2)  # Stagger launches
 
                 # Verify phase: wait for heartbeats then check who's missing
@@ -1525,8 +1544,9 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                                     time.sleep(0.5)
                             except (psutil.NoSuchProcess, psutil.AccessDenied):
                                 pass
-                        result = manager.launch_instance(acc_name, server_key)
-                        print(f"[VERIFY] Re-relaunched {acc_name} â†’ {server_key}: {result}")
+                        acc_server = manager.get_default_server(acc_name) or server_key
+                        result = manager.launch_instance(acc_name, acc_server)
+                        print(f"[VERIFY] Re-relaunched {acc_name} -> {acc_server}: {result}")
                         time.sleep(2)
                 else:
                     print(f"[VERIFY] All accounts confirmed in {server_key}!")

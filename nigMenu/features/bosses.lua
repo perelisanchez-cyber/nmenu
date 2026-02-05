@@ -1214,6 +1214,49 @@ end
 -- AUTO-START ON JOIN (for autoexec loop)
 -- ============================================================================
 
+function Bosses.fetchMyServer()
+    --[[
+        Query the manager for this account's assigned default server.
+        GET /my-server/<username> → { server_key, server_name, link_code }
+        Updates Bosses.forcedServerKey so enforcement uses the right server.
+    ]]
+    local Config = getConfig()
+    if not Config then return end
+
+    local username = ""
+    pcall(function() username = game:GetService("Players").LocalPlayer.Name end)
+    if username == "" then return end
+
+    pcall(function()
+        local HttpService = game:GetService("HttpService")
+        local response = request({
+            Url = Bosses.managerUrl .. "/my-server/" .. HttpService:UrlEncode(username),
+            Method = "GET",
+        })
+        if response and response.StatusCode == 200 then
+            local data = HttpService:JSONDecode(response.Body)
+            if data.server_key and data.server_key ~= "" then
+                Bosses.forcedServerKey = data.server_key
+                -- Also update the servers list if we got a link_code we don't have
+                local found = false
+                for _, s in ipairs(Bosses.servers) do
+                    if s.key == data.server_key then
+                        found = true
+                        break
+                    end
+                end
+                if not found and data.link_code ~= "" then
+                    table.insert(Bosses.servers, {
+                        name = data.server_name ~= "" and data.server_name or data.server_key,
+                        joinCode = data.link_code,
+                        key = data.server_key,
+                    })
+                end
+            end
+        end
+    end)
+end
+
 function Bosses.checkAutoStart()
     local NM = getNM()
     local con = NM and NM.Features and NM.Features.console
@@ -1221,11 +1264,16 @@ function Bosses.checkAutoStart()
         if con then con.log(msg) else print("[BossFarm] " .. msg) end
     end
 
+    -- Query manager for this account's assigned default server
+    log("Querying manager for default server...")
+    Bosses.fetchMyServer()
+    log("Default server: " .. Bosses.forcedServerKey)
+
     -- Always enforce correct server at boot (before starting farm)
     if Bosses.privateServerOnly then
         log("Checking server enforcement...")
         if Bosses.checkServerEnforcement() then
-            log("Wrong server detected - teleporting to correct server")
+            log("Wrong server detected - relaunching via manager")
             return  -- don't start farm, we're leaving this server
         end
         log("Server OK (private)")

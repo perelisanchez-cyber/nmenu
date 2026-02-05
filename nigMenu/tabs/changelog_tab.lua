@@ -19,6 +19,16 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.10",
+        date = "2026-02-05",
+        entries = {
+            { type = "added", text = "Per-account default server — each user can set their own server in the manager" },
+            { type = "added", text = "Lua queries GET /my-server/<username> at boot to get assigned server" },
+            { type = "changed", text = "Manager restart now launches each account to their own default server" },
+            { type = "changed", text = "Manager verify/re-relaunch also respects per-account server assignment" },
+        }
+    },
+    {
         version = "1.0.9",
         date = "2026-02-05",
         entries = {
