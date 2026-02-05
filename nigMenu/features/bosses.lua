@@ -923,16 +923,19 @@ function Bosses.startFarmLoop()
             end
             
             if not npcFound then
+                visited[targetKey] = true
                 local stillActive
                 if target.type == "Boss" then stillActive = Bosses.isBossActive(target.world)
                 else stillActive = Bosses.isAngelActive(target.world) end
-                
-                if stillActive ~= true then
-                    visited[targetKey] = true
+
+                if stillActive == true then
+                    Bosses.status = "W" .. target.world .. " " .. target.type .. " - event active but NPC missing, skipping"
+                    log("W" .. target.world .. " " .. target.type .. " event active but NPC never loaded, skipping")
+                else
                     Bosses.status = "W" .. target.world .. " " .. target.type .. " already gone"
-                    task.wait(2)
-                    continue
                 end
+                task.wait(2)
+                continue
             end
             
             -- Main farming loop - stay until NPC is dead
@@ -953,12 +956,18 @@ function Bosses.startFarmLoop()
                         local stillActive
                         if target.type == "Boss" then stillActive = Bosses.isBossActive(target.world)
                         else stillActive = Bosses.isAngelActive(target.world) end
-                        
+
                         if stillActive ~= true then
                             Bosses.kills = Bosses.kills + 1
                             bossConfirmedDead = true
                             log("W" .. target.world .. " " .. target.type .. " DEAD! (kill #" .. Bosses.kills .. ")")
                             Bosses.status = target.type .. " dead! (" .. Bosses.kills .. " kills)"
+                            visited[targetKey] = true
+                            break
+                        elseif noNpcCount >= 20 then
+                            -- NPC missing for 20s+ with event active — stuck, move on
+                            log("W" .. target.world .. " " .. target.type .. " NPC missing too long, skipping")
+                            Bosses.status = "W" .. target.world .. " " .. target.type .. " - NPC gone, moving on"
                             visited[targetKey] = true
                             break
                         else

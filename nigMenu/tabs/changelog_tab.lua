@@ -19,6 +19,14 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.4",
+        date = "2026-02-05",
+        entries = {
+            { type = "fixed", text = "Farm loop no longer TPs to bosses whose event is active but NPC never loads" },
+            { type = "fixed", text = "Farm loop no longer gets stuck forever on 'NPC missing, event active' (20s timeout)" },
+        }
+    },
+    {
         version = "1.0.3",
         date = "2026-02-05",
         entries = {
