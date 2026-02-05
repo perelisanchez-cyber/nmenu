@@ -7,20 +7,16 @@
     
     loadstring(game:HttpGet("https://raw.githubusercontent.com/perelisanchez-cyber/nmenu/main/github_loader.lua"))()
     
-    Repo structure (flat — all .lua files at the root):
-      nmenu/
-        github_loader.lua
-        config.lua
-        utils.lua
-        settings.lua
-        ui.lua
-        console.lua
-        raids.lua
-        bosses.lua
-        ...
+    Repo structure:
+      nmenu/                    (repo root)
+        github_loader.lua       (this file)
+        nigMenu/
+          core/config.lua, utils.lua, settings.lua, ui.lua
+          features/console.lua, bosses.lua, raids.lua, ...
+          tabs/auto_tab.lua, bosses_tab.lua, ...
 ]]
 
-local REPO_BASE = "https://raw.githubusercontent.com/perelisanchez-cyber/nmenu/main/"
+local RAW_BASE = "https://raw.githubusercontent.com/perelisanchez-cyber/nmenu/main/nigMenu/"
 
 -- ============================================================================
 -- SINGLE INSTANCE CHECK
@@ -56,8 +52,8 @@ end
 -- GITHUB FETCH + EXECUTE
 -- ============================================================================
 
-local function fetch(filename)
-    local url = REPO_BASE .. filename
+local function fetch(path)
+    local url = RAW_BASE .. path
     local ok, source = pcall(game.HttpGet, game, url)
 
     -- Fallback for executors that don't support game:HttpGet
@@ -72,19 +68,20 @@ local function fetch(filename)
     end
 
     if not ok or not source or source == "" then
-        warn("[nigMenu] ✗ Failed to fetch: " .. filename)
+        warn("[nigMenu] ✗ Failed to fetch: " .. path)
+        warn("[nigMenu]   URL: " .. url)
         return nil
     end
 
     local fn, err = loadstring(source)
     if not fn then
-        warn("[nigMenu] ✗ Syntax error in " .. filename .. ": " .. tostring(err))
+        warn("[nigMenu] ✗ Syntax error in " .. path .. ": " .. tostring(err))
         return nil
     end
 
     local success, result = pcall(fn)
     if not success then
-        warn("[nigMenu] ✗ Runtime error in " .. filename .. ": " .. tostring(result))
+        warn("[nigMenu] ✗ Runtime error in " .. path .. ": " .. tostring(result))
         return nil
     end
 
@@ -105,26 +102,26 @@ _G.nigMenu = {}
 local NM = _G.nigMenu
 
 -- ============================================================================
--- CORE MODULES (all at repo root)
+-- CORE (nigMenu/core/)
 -- ============================================================================
 
-NM.Config = fetch("config.lua")
-if not NM.Config then error("[nigMenu] Config failed — check repo is public and file exists") end
+NM.Config = fetch("core/config.lua")
+if not NM.Config then error("[nigMenu] Config failed — check repo is public and file exists at nigMenu/core/config.lua") end
 print("[nigMenu] ✓ Config")
 
-NM.Utils = fetch("utils.lua")
+NM.Utils = fetch("core/utils.lua")
 if not NM.Utils then error("[nigMenu] Utils failed") end
 print("[nigMenu] ✓ Utils")
 
-NM.Settings = fetch("settings.lua")
+NM.Settings = fetch("core/settings.lua")
 print("[nigMenu] " .. (NM.Settings and "✓" or "⚠") .. " Settings")
 
-NM.UI = fetch("ui.lua")
+NM.UI = fetch("core/ui.lua")
 if not NM.UI then error("[nigMenu] UI failed") end
 print("[nigMenu] ✓ UI")
 
 -- ============================================================================
--- FEATURE MODULES (all at repo root)
+-- FEATURES (nigMenu/features/)
 -- ============================================================================
 
 NM.Features = {}
@@ -133,7 +130,7 @@ for _, name in ipairs({
     "console", "raids", "autoroll", "generals", "swords",
     "splitter", "accessories", "merger", "utilities", "autobuy", "bosses"
 }) do
-    local m = fetch(name .. ".lua")
+    local m = fetch("features/" .. name .. ".lua")
     if m then
         NM.Features[name] = m
         print("[nigMenu] ✓ " .. name)
@@ -143,7 +140,7 @@ for _, name in ipairs({
 end
 
 -- ============================================================================
--- TAB MODULES (all at repo root)
+-- TABS (nigMenu/tabs/)
 -- ============================================================================
 
 NM.Tabs = {}
@@ -158,7 +155,7 @@ for _, t in ipairs({
     { f = "utils_tab.lua",    n = "Utils" },
     { f = "config_tab.lua",   n = "Config" },
 }) do
-    local m = fetch(t.f)
+    local m = fetch("tabs/" .. t.f)
     if m then
         NM.Tabs[t.n] = m
         print("[nigMenu] ✓ " .. t.n .. " tab")
