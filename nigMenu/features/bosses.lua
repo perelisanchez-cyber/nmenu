@@ -50,9 +50,7 @@ Bosses.autoFarmOnJoin = false     -- Auto-start farm loop when menu loads (for a
 -- ============================================================================
 
 Bosses.servers = {
-    { name = "Farm Server",  joinCode = "78782432814231717861076663443421", key = "farm" },
     { name = "Raid Server",  joinCode = "92098597466172680429134969286305", key = "raid" },
-    { name = "Server 3",     joinCode = "29171578797016047998164784678510", key = "server3" },
 }
 Bosses.currentServerIndex = 1
 Bosses.loaderCode = ""
