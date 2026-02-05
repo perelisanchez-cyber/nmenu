@@ -1390,6 +1390,44 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             })
             return
 
+        # GET /verify-launch/<username> -- Lua asks "did you launch me recently?"
+        # Used for server enforcement: if manager launched this account, trust it
+        if len(parts) >= 2 and parts[0] == "verify-launch":
+            username = parts[1]
+            # Find account by username or account name
+            found_acc = None
+            for acc_name, acc_data in manager.accounts.items():
+                if acc_data.get("username", "").lower() == username.lower() or acc_name.lower() == username.lower():
+                    found_acc = acc_name
+                    break
+            if not found_acc:
+                self._respond(200, {"ok": False, "reason": "unknown_account"})
+                return
+            inst = manager.instances.get(found_acc)
+            if not inst:
+                self._respond(200, {"ok": False, "reason": "no_instance"})
+                return
+            # Check if process is still alive
+            pid_alive = False
+            if inst.get("pid", 0):
+                try:
+                    pid_alive = psutil.pid_exists(inst["pid"])
+                except:
+                    pass
+            launched_at = inst.get("launched_at", 0)
+            age = time.time() - launched_at if launched_at else 9999
+            server_key = inst.get("server_key", "")
+            expected = manager.get_default_server(found_acc) or "farm"
+            self._respond(200, {
+                "ok": pid_alive and server_key == expected,
+                "pid_alive": pid_alive,
+                "server_key": server_key,
+                "expected_server": expected,
+                "launched_ago": round(age),
+                "account": found_acc,
+            })
+            return
+
         self._respond(200, {"info": "Roblox Manager API", "servers": list(SERVERS.keys())})
 
     def do_POST(self):

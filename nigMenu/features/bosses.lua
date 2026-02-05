@@ -135,28 +135,60 @@ function Bosses.checkServerEnforcement()
         if con then con.log(msg) else print(msg) end
     end
 
-    -- Retry: PrivateServerId can take several seconds to populate after join
-    local privateServerId = ""
-    for attempt = 1, 5 do
-        privateServerId = game.PrivateServerId or ""
-        if privateServerId ~= "" then break end
-        log("SERVER ENFORCEMENT: PrivateServerId empty, waiting... (attempt " .. attempt .. "/5)")
-        Bosses.status = "Checking server... (" .. attempt .. "/5)"
-        task.wait(3)
-    end
-
-    if privateServerId ~= "" then
-        log("SERVER ENFORCEMENT: OK — PrivateServerId = " .. privateServerId)
+    local username = ""
+    pcall(function() username = game:GetService("Players").LocalPlayer.Name end)
+    if username == "" then
+        log("SERVER ENFORCEMENT: Can't get username, skipping")
         return false
     end
 
-    -- Still empty after retries — we're in a public server
+    --[[
+        Ask the manager: "did you launch me to the correct server?"
+        The manager tracks PIDs, server keys, and launch times.
+        This is more reliable than game.PrivateServerId which is empty on many executors.
+    ]]
+    local managerOk = false
+    local managerReason = "no_response"
+
+    for attempt = 1, 3 do
+        Bosses.status = "Verifying server with manager... (" .. attempt .. "/3)"
+        log("SERVER ENFORCEMENT: Querying manager verify-launch (attempt " .. attempt .. "/3)")
+
+        local success, result = pcall(function()
+            local HttpService = game:GetService("HttpService")
+            local response = request({
+                Url = Bosses.managerUrl .. "/verify-launch/" .. HttpService:UrlEncode(username),
+                Method = "GET",
+            })
+            if response and response.StatusCode == 200 then
+                return HttpService:JSONDecode(response.Body)
+            end
+            return nil
+        end)
+
+        if success and result then
+            if result.ok then
+                log("SERVER ENFORCEMENT: Manager confirms OK — server=" .. tostring(result.server_key) .. ", pid_alive=" .. tostring(result.pid_alive))
+                managerOk = true
+                break
+            else
+                managerReason = result.reason or ("server_key=" .. tostring(result.server_key) .. " expected=" .. tostring(result.expected_server))
+                log("SERVER ENFORCEMENT: Manager says NOT OK — " .. managerReason)
+            end
+        else
+            log("SERVER ENFORCEMENT: Manager unreachable, retrying...")
+            task.wait(3)
+        end
+    end
+
+    if managerOk then
+        return false -- all good, we're in the right server
+    end
+
+    -- Manager says we're NOT in the right place (or unreachable)
     Bosses._enforcementTriggered = true -- prevent re-triggering
 
-    local username = ""
-    pcall(function() username = game:GetService("Players").LocalPlayer.Name end)
-
-    log("SERVER ENFORCEMENT: In public server after 5 checks! Restarting THIS account -> " .. Bosses.forcedServerKey)
+    log("SERVER ENFORCEMENT: Failed! Reason: " .. managerReason .. " — restarting THIS account -> " .. Bosses.forcedServerKey)
     Bosses.status = "Wrong server - relaunching this account..."
 
     pcall(function()

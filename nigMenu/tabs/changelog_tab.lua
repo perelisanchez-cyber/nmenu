@@ -19,11 +19,19 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.12",
+        date = "2026-02-05",
+        entries = {
+            { type = "fixed", text = "Server enforcement no longer uses game.PrivateServerId (always empty on this executor)" },
+            { type = "changed", text = "Enforcement now queries manager GET /verify-launch/<user> — manager confirms PID alive + correct server" },
+            { type = "added", text = "Manager endpoint GET /verify-launch/<username> checks tracked PID, server_key, and expected server" },
+        }
+    },
+    {
         version = "1.0.11",
         date = "2026-02-05",
         entries = {
             { type = "fixed", text = "Server enforcement restart loop — no longer kills ALL Roblox processes" },
-            { type = "changed", text = "Enforcement now retries PrivateServerId 5× (3s each) before concluding public server" },
             { type = "changed", text = "Enforcement uses single-account restart (POST /restart/<user>/<server>) instead of full restart" },
             { type = "changed", text = "Manager single-account restart only kills that account's tracked PID, not all processes" },
             { type = "added", text = "One-shot guard: enforcement can only trigger once per session to prevent loops" },
