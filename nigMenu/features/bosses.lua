@@ -811,8 +811,8 @@ end
 function Bosses.buildTargetList()
     --[[
         Scan workspace.Client.Enemies.WorldBoss for alive NPC models.
-        No teleporting needed — this folder contains bosses across ALL worlds.
-        Returns only confirmed-alive targets within [farmMinWorld..farmMaxWorld].
+        Only finds NPCs in the player's CURRENT world (workspace is local).
+        Returns confirmed-alive targets within [farmMinWorld..farmMaxWorld].
     ]]
     local folder = getWorldBossFolder()
     if not folder then return {} end
@@ -843,7 +843,6 @@ function Bosses.buildTargetList()
                             local nameL = nameLabel.Text:lower()
 
                             if nameL:find("angel") then
-                                -- Angel — determine world by matching position to known coords
                                 if Bosses.farmAngels then
                                     local pos = nil
                                     pcall(function()
@@ -872,7 +871,6 @@ function Bosses.buildTargetList()
                                     end
                                 end
                             else
-                                -- Boss — match by name
                                 if Bosses.farmBosses then
                                     for key, data in pairs(bossLookup) do
                                         if nameL:find(key) then
@@ -899,15 +897,53 @@ function Bosses.buildTargetList()
     return targets
 end
 
+function Bosses.getEventTargets()
+    --[[
+        Fallback: use the event system to find which worlds MIGHT have
+        active bosses/angels. These are hints — the NPC must still be
+        verified after teleporting. Skips worlds we already checked.
+    ]]
+    local targets = {}
+    for i = Bosses.farmMinWorld, Bosses.farmMaxWorld do
+        local data = Bosses.Data[i]
+        if not data then continue end
+
+        if Bosses.farmBosses then
+            local active = Bosses.isBossActive(i)
+            if active == true then
+                table.insert(targets, {
+                    world = i, type = "Boss",
+                    bossName = data.bossEvent:gsub("_BossEvent", ""),
+                    coords = data.boss, spawn = data.spawn,
+                })
+            end
+        end
+
+        if Bosses.farmAngels then
+            local active = Bosses.isAngelActive(i)
+            if active == true then
+                table.insert(targets, {
+                    world = i, type = "Angel",
+                    bossName = "Boss Angel",
+                    coords = data.angel, spawn = data.spawn,
+                })
+            end
+        end
+    end
+    return targets
+end
+
 --[[
-    Main farm loop — workspace-based detection.
+    Main farm loop — hybrid detection.
 
     FLOW:
-    1. Scan workspace.Client.Enemies.WorldBoss for alive NPC models (instant, no TP)
-    2. If alive target found → teleport to its world → farm until dead
-    3. After kill → rescan immediately for more targets
-    4. If no alive targets → wait a few seconds → rescan
-    5. If autoRestartOnKill and nothing left after kills → restart server
+    1. Scan workspace for alive NPCs (instant, current world only)
+    2. If found → farm them directly
+    3. If workspace empty → use events as HINTS for which worlds to visit
+    4. Teleport to event-hinted world → verify NPC in workspace → farm if real
+    5. If event lied (NPC not there) → skip, try next hint
+    6. If nothing anywhere → idle and wait
+    7. After kills + autoRestartOnKill + nothing left → restart server
 ]]
 function Bosses.startFarmLoop()
     local Config = getConfig()
@@ -965,58 +1001,111 @@ function Bosses.startFarmLoop()
         return false -- farm stopped
     end
 
+    -- Teleport to a target, verify NPC exists, farm if real. Returns true if killed.
+    local function visitAndFarm(target)
+        Bosses.status = "TP -> W" .. target.world .. " " .. target.type .. " (" .. target.spawn .. ")"
+        log("Teleporting to W" .. target.world .. " " .. target.type)
+
+        local success = Bosses.teleportAndWait(target.world, target.coords)
+        if not success then
+            log("TP to W" .. target.world .. " failed")
+            return false
+        end
+
+        task.wait(2)
+
+        -- Check workspace for the NPC after arriving
+        local npc, hp = Bosses.findWorldBossNPC(target.bossName)
+        if npc and hp > 0 then
+            return farmNPC(target.world, target.type, target.bossName, target.coords)
+        else
+            log("W" .. target.world .. " " .. target.type .. " not found after TP")
+            return false
+        end
+    end
+
     task.spawn(function()
         if Bosses.checkServerEnforcement() then
             log("Server enforcement triggered - waiting for relaunch...")
             return
         end
 
+        -- Track event-hinted worlds that had no NPC (avoid re-visiting too soon)
+        local eventCooldown = {} -- [worldNum.."_"..type] = os.time() of last failed visit
+
         while Bosses.farmEnabled and Config.State.running do
-            -- Scan workspace for alive NPCs (instant, no teleport)
-            Bosses.status = "Scanning for alive bosses..."
+            -- ============================================================
+            -- STEP 1: Check workspace for NPCs in current world (instant)
+            -- ============================================================
+            Bosses.status = "Scanning workspace..."
             Bosses.currentTarget = nil
 
-            local targets = Bosses.buildTargetList()
+            local localTargets = Bosses.buildTargetList()
 
-            if #targets == 0 then
-                Bosses.status = "No bosses alive, waiting..."
-                task.wait(5)
-                continue
-            end
+            if #localTargets > 0 then
+                log("Found " .. #localTargets .. " NPC(s) in current world")
+                for _, target in ipairs(localTargets) do
+                    if not Bosses.farmEnabled or not Config.State.running then break end
+                    visitAndFarm(target)
+                    task.wait(2)
+                end
+            else
+                -- ============================================================
+                -- STEP 2: Nothing local — use events as hints for remote worlds
+                -- ============================================================
+                local eventTargets = Bosses.getEventTargets()
+                local now = os.time()
 
-            log("Found " .. #targets .. " alive target(s)")
-
-            for _, target in ipairs(targets) do
-                if not Bosses.farmEnabled or not Config.State.running then break end
-
-                Bosses.status = "TP -> W" .. target.world .. " " .. target.type .. " (" .. target.spawn .. ")"
-                log("Teleporting to W" .. target.world .. " " .. target.type)
-
-                local success = Bosses.teleportAndWait(target.world, target.coords)
-                if not success then
-                    log("TP to W" .. target.world .. " failed, skipping")
-                    continue
+                -- Filter out worlds on cooldown (visited < 60s ago with no NPC)
+                local candidates = {}
+                for _, t in ipairs(eventTargets) do
+                    local key = t.world .. "_" .. t.type
+                    if not eventCooldown[key] or (now - eventCooldown[key]) > 60 then
+                        table.insert(candidates, t)
+                    end
                 end
 
-                -- Brief settle after TP
-                task.wait(2)
+                if #candidates > 0 then
+                    log("Events hint " .. #candidates .. " target(s), verifying...")
+                    for _, target in ipairs(candidates) do
+                        if not Bosses.farmEnabled or not Config.State.running then break end
 
-                -- Verify NPC is still alive after arriving
-                local npc, hp = Bosses.findWorldBossNPC(target.bossName)
-                if npc and hp > 0 then
-                    farmNPC(target.world, target.type, target.bossName, target.coords)
-                    task.wait(2)
+                        Bosses.status = "Checking W" .. target.world .. " " .. target.type .. " (" .. target.spawn .. ")..."
+
+                        local success = Bosses.teleportAndWait(target.world, target.coords)
+                        if not success then continue end
+
+                        task.wait(2)
+
+                        -- Verify NPC is actually here
+                        local npc, hp = Bosses.findWorldBossNPC(target.bossName)
+                        if npc and hp > 0 then
+                            farmNPC(target.world, target.type, target.bossName, target.coords)
+                            task.wait(2)
+                            -- Clear cooldown on success
+                            eventCooldown[target.world .. "_" .. target.type] = nil
+                        else
+                            -- Event lied — cooldown this target for 60s
+                            log("W" .. target.world .. " " .. target.type .. " event active but NPC missing, cooling down")
+                            eventCooldown[target.world .. "_" .. target.type] = now
+                        end
+                    end
                 else
-                    log("W" .. target.world .. " " .. target.type .. " gone by the time we arrived")
+                    Bosses.status = "No bosses detected, waiting..."
+                    task.wait(5)
+                    continue
                 end
             end
 
             if not Bosses.farmEnabled or not Config.State.running then break end
 
-            -- After processing targets: restart check
+            -- ============================================================
+            -- RESTART CHECK
+            -- ============================================================
             if Bosses.kills > 0 and Bosses.autoRestartOnKill then
-                local remaining = Bosses.buildTargetList()
-                if #remaining == 0 then
+                local localLeft = Bosses.buildTargetList()
+                local eventLeft = Bosses.getEventTargets()
+                if #localLeft == 0 and #eventLeft == 0 then
                     log("All targets dead - RESTARTING SERVER!")
                     Bosses.status = "All dead -> Restarting server..."
                     task.wait(2)

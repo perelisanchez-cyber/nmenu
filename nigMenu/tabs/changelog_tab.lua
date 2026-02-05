@@ -19,6 +19,16 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.7",
+        date = "2026-02-05",
+        entries = {
+            { type = "fixed", text = "Farm loop now uses hybrid detection: workspace scan + event fallback" },
+            { type = "changed", text = "Workspace scan checks current world instantly for alive NPCs" },
+            { type = "changed", text = "Events used as fallback hints for remote worlds, verified after TP" },
+            { type = "added", text = "60s cooldown on event-hinted worlds where NPC wasn't found (prevents re-visiting)" },
+        }
+    },
+    {
         version = "1.0.6",
         date = "2026-02-05",
         entries = {
