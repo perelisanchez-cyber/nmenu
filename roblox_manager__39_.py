@@ -1279,6 +1279,51 @@ class AccountManager:
         # Process alive, no heartbeat, been a while since launch = stuck/disconnected
         return False, pid, srv
 
+    def cleanup_orphan_processes(self):
+        """Kill any RobloxPlayerBeta processes that aren't tracked by a healthy instance.
+
+        This prevents zombie Roblox windows from piling up when:
+        - PID tracking failed (pid=0) so we can't kill a specific process
+        - Game got stuck on loading screen (no heartbeat ever sent)
+        - Process survived a restart/rejoin cycle
+
+        Returns: number of orphan processes killed
+        """
+        # Collect PIDs that are tracked AND have recent heartbeat or are in grace period
+        healthy_pids = set()
+        for acc_name, inst in self.instances.items():
+            pid = inst.get("pid", 0)
+            if not pid:
+                continue
+            # Check if this instance is considered "running" (healthy)
+            running, _, _ = self.get_instance_status(acc_name, require_heartbeat=True)
+            if running:
+                healthy_pids.add(pid)
+
+        # Scan all Roblox processes and kill any that aren't healthy
+        killed = 0
+        for p in psutil.process_iter(["pid", "name"]):
+            try:
+                if p.info["name"] and "RobloxPlayerBeta" in p.info["name"]:
+                    if p.info["pid"] not in healthy_pids:
+                        p.kill()
+                        killed += 1
+                        print(f"[ORPHAN] Killed untracked/stale Roblox process PID {p.info['pid']}")
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
+        # Also clean up instance entries with pid=0 (failed PID tracking)
+        stale_instances = [name for name, inst in self.instances.items() if inst.get("pid", 0) == 0]
+        for name in stale_instances:
+            launched_at = self.instances[name].get("launched_at", 0)
+            if time.time() - launched_at > 90:  # past grace period
+                self.instances.pop(name, None)
+                print(f"[ORPHAN] Cleared stale instance entry for {name} (pid=0, never tracked)")
+
+        if killed:
+            print(f"[ORPHAN] Cleanup done: killed {killed} orphan process(es)")
+        return killed
+
 
 # ============================================================================
 # HTTP API SERVER (runs in background thread for executor)
@@ -2476,6 +2521,16 @@ class RobloxManagerApp:
                 now = time.time()
                 require_heartbeat = self.settings.get("requireHeartbeat", True)
 
+                # Periodic orphan cleanup: kill zombie Roblox processes not tracked by healthy instances
+                if check_count[0] % 3 == 0:
+                    try:
+                        orphans_killed = manager.cleanup_orphan_processes()
+                        if orphans_killed:
+                            self.root.after(0, lambda k=orphans_killed: self.log(
+                                f"\U0001F9F9 Orphan cleanup: killed {k} zombie process(es)", "warn"))
+                    except Exception as ex:
+                        self.root.after(0, lambda e=str(ex): self.log(f"Orphan cleanup error: {e}", "error"))
+
                 # Collect accounts that need relaunching
                 accounts_to_relaunch = []
 
@@ -2555,6 +2610,14 @@ class RobloxManagerApp:
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
             manager.instances.pop(acc_name, None)
+
+            # Kill any orphan Roblox processes before launching a new one
+            # This prevents zombie windows from piling up when PID tracking failed
+            orphans = manager.cleanup_orphan_processes()
+            if orphans:
+                self.root.after(0, lambda k=orphans: self.log(
+                    f"\U0001F9F9 Pre-launch cleanup: killed {k} orphan(s)", "warn"))
+                time.sleep(1)
 
             # Clear old heartbeat so get_instance_status hits the grace period
             # instead of seeing a stale timestamp from the previous process

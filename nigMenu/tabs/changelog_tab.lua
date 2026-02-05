@@ -19,6 +19,16 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.13",
+        date = "2026-02-05",
+        entries = {
+            { type = "added", text = "Orphan process cleanup — kills zombie Roblox windows not tracked by healthy instances" },
+            { type = "changed", text = "Watchdog runs orphan cleanup every 3rd check cycle to prevent process buildup" },
+            { type = "changed", text = "Watchdog rejoin kills orphan processes before relaunching to clear stuck-on-loading windows" },
+            { type = "fixed", text = "Processes stuck on loading screen (PID=0) now get cleaned up instead of piling up" },
+        }
+    },
+    {
         version = "1.0.12",
         date = "2026-02-05",
         entries = {

@@ -49,7 +49,7 @@ end)
 Config.Constants = {
     AUTO_LEAVE_WAVE = 501,
     ENABLE_AUTO_LEAVE = true,
-    VERSION = "1.0.12",
+    VERSION = "1.0.13",
     
     -- Potion names
     POTIONS = {
