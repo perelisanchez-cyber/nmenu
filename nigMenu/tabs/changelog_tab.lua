@@ -19,6 +19,17 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.8",
+        date = "2026-02-05",
+        entries = {
+            { type = "fixed", text = "Farm now uses workspace.Server.Enemies.WorldBoss (server-side, GLOBAL across all worlds)" },
+            { type = "changed", text = "Detection reads Health/Died/spawnTime attributes directly from server parts — no more BillboardGui parsing" },
+            { type = "changed", text = "Health tracking during farm uses server attributes (ground truth) instead of client-side NPC models" },
+            { type = "added", text = "Event system kept as fallback only if server folder returns empty" },
+            { type = "optimized", text = "No more unreliable event BoolValues as primary detection — server parts are authoritative" },
+        }
+    },
+    {
         version = "1.0.7",
         date = "2026-02-05",
         entries = {
