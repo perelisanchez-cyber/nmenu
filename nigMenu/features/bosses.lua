@@ -8,9 +8,9 @@
     BOSS FARM LOOP:
       1. Auto-farm teleports to active boss/angel
       2. Monitors boss HP via workspace detection
-      3. When all targets dead -> sends POST /restart/<server> to roblox_manager
+      3. When all targets dead → sends POST /restart/<server> to roblox_manager
       4. Manager shuts down private server + relaunches ALL accounts
-      5. Autoexec re-runs loader -> farm resumes automatically
+      5. Autoexec re-runs loader → farm resumes automatically
       6. Loop repeats infinitely
     
     Event naming from EventManagerShared:
