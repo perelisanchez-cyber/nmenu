@@ -19,6 +19,14 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.15",
+        date = "2026-02-05",
+        entries = {
+            { type = "added", text = "Per-launch health check — kills Roblox process if no heartbeat received within 120s of launch" },
+            { type = "fixed", text = "Processes stuck on loading screen are now auto-killed instead of piling up as zombies" },
+        }
+    },
+    {
         version = "1.0.14",
         date = "2026-02-05",
         entries = {
