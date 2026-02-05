@@ -44,6 +44,8 @@ function Settings.save()
             utilityToggles = Config.Toggles.utilityToggles,
             potionToggles = Config.Toggles.potionToggles,
             starAutoMergeSettings = Config.Toggles.starAutoMergeSettings,
+            
+            -- Boss farm settings (persists farm state across re-inject)
             bossToggles = Config.Toggles.bossToggles
         }
         
@@ -172,7 +174,7 @@ function Settings.load()
         Config.Toggles.starAutoMergeSettings = data.starAutoMergeSettings
     end
     
-    -- Boss tab toggles
+    -- Boss farm toggles (includes farmEnabled for resume across re-inject)
     if data.bossToggles then
         Config.Toggles.bossToggles = data.bossToggles
     end
