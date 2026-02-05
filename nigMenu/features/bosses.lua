@@ -8,9 +8,9 @@
     BOSS FARM LOOP:
       1. Auto-farm teleports to active boss/angel
       2. Monitors boss HP via workspace detection
-      3. When all targets dead → sends POST /restart/<server> to roblox_manager
+      3. When all targets dead â†’ sends POST /restart/<server> to roblox_manager
       4. Manager shuts down private server + relaunches ALL accounts
-      5. Autoexec re-runs loader → farm resumes automatically
+      5. Autoexec re-runs loader â†’ farm resumes automatically
       6. Loop repeats infinitely
     
     Event naming from EventManagerShared:
@@ -58,6 +58,73 @@ Bosses.currentServerIndex = 1
 Bosses.loaderCode = ""
 Bosses.managerUrl = "http://localhost:8080"
 Bosses.hopMethod = "G"
+
+-- ============================================================================
+-- FARM STATE PERSISTENCE
+-- ============================================================================
+-- Saves farm settings to a local file so the farm auto-resumes after
+-- a server restart + relaunch cycle. Written when farm starts or restarts,
+-- cleared when farm is manually stopped.
+
+Bosses.farmStateFile = "nigMenu_farmState.json"
+
+function Bosses.saveFarmState()
+    if not writefile then return false end
+    local ok = pcall(function()
+        local HttpService = game:GetService("HttpService")
+        local state = {
+            farmEnabled     = true,
+            farmBosses      = Bosses.farmBosses,
+            farmAngels      = Bosses.farmAngels,
+            farmMinWorld    = Bosses.farmMinWorld,
+            farmMaxWorld    = Bosses.farmMaxWorld,
+            travelTime      = Bosses.travelTime,
+            autoRestartOnKill = Bosses.autoRestartOnKill,
+            currentServerIndex = Bosses.currentServerIndex,
+            hopMethod       = Bosses.hopMethod,
+            privateServerOnly = Bosses.privateServerOnly,
+            forcedServerKey = Bosses.forcedServerKey,
+        }
+        writefile(Bosses.farmStateFile, HttpService:JSONEncode(state))
+    end)
+    return ok
+end
+
+function Bosses.loadFarmState()
+    if not isfile or not readfile then return nil end
+    if not isfile(Bosses.farmStateFile) then return nil end
+    local ok, data = pcall(function()
+        local HttpService = game:GetService("HttpService")
+        return HttpService:JSONDecode(readfile(Bosses.farmStateFile))
+    end)
+    if ok and data then return data end
+    return nil
+end
+
+function Bosses.clearFarmState()
+    if not delfile then
+        -- Fallback: overwrite with empty object
+        if writefile then
+            pcall(function() writefile(Bosses.farmStateFile, "{}") end)
+        end
+        return
+    end
+    pcall(function() delfile(Bosses.farmStateFile) end)
+end
+
+function Bosses.applyFarmState(state)
+    if not state then return end
+    if state.farmBosses ~= nil then Bosses.farmBosses = state.farmBosses end
+    if state.farmAngels ~= nil then Bosses.farmAngels = state.farmAngels end
+    if state.farmMinWorld then Bosses.farmMinWorld = state.farmMinWorld end
+    if state.farmMaxWorld then Bosses.farmMaxWorld = state.farmMaxWorld end
+    if state.travelTime then Bosses.travelTime = state.travelTime end
+    if state.autoRestartOnKill ~= nil then Bosses.autoRestartOnKill = state.autoRestartOnKill end
+    if state.currentServerIndex then Bosses.currentServerIndex = state.currentServerIndex end
+    if state.hopMethod then Bosses.hopMethod = state.hopMethod end
+    if state.privateServerOnly ~= nil then Bosses.privateServerOnly = state.privateServerOnly end
+    if state.forcedServerKey then Bosses.forcedServerKey = state.forcedServerKey end
+end
 
 --[[
     Send restart command to roblox_manager.py
@@ -298,13 +365,13 @@ Bosses.Data = {
     { world = 20, spawn = "Spirit",                bossEvent = "Small Alchemist_BossEvent",  boss = Vector3.new(-17349.1, 1009.5, 18164.5),   angel = Vector3.new(-17394.2, 1008.6, 17975.1) },
     { world = 21, spawn = "Shantytown",            bossEvent = "Strong_BossEvent",           boss = Vector3.new(-24868.3, 1012.0, 36681.2),   angel = Vector3.new(-24931.3, 1011.3, 36444.5) },
     { world = 22, spawn = "Fireworkers",           bossEvent = "Goblin King_BossEvent",      boss = Vector3.new(-21862.6, 1011.3, 19020.4),   angel = Vector3.new(-21826.3, 1011.3, 18857.3) },
-    { world = 23, spawn = "Sayan Valley",             bossEvent = "Red Knight_BossEvent",       boss = Vector3.new(-28163.3, 1010.8, 13778.6),   angel = Vector3.new(-28178.2, 1011.1, 13606.7) },
-    { world = 24, spawn = "Grand Sea",         bossEvent = "Bomas_BossEvent",            boss = Vector3.new(-40929.8, 1012.2, 13590.6),   angel = Vector3.new(-40955.4, 1006.9, 13445.5) },
-    { world = 25, spawn = "Ninja Village",     bossEvent = "Sands Titan_BossEvent",      boss = Vector3.new(-25462.9, 1489.0, 5265.2),    angel = Vector3.new(-25013.4, 1410.1, 5462.5) },
-    { world = 26, spawn = "Swordsman Village",           bossEvent = "Kasak_BossEvent",            boss = Vector3.new(-15913.6, 395.0, 13650.8),    angel = Vector3.new(-16134.1, 394.1, 13812.1) },
-    { world = 27, spawn = "Walled City",    bossEvent = "No Punch_BossEvent",         boss = Vector3.new(10463.6, 20.2, -32548.5),     angel = Vector3.new(10293.1, 19.3, -32444.9) },
-    { world = 28, spawn = "Superhuman Academy",        bossEvent = "Buryry_BossEvent",           boss = Vector3.new(9789.4, 20.2, -36021.8),      angel = Vector3.new(9924.8, 19.3, -36588.5) },
-    { world = 29, spawn = "Shield Kingdom",          bossEvent = "Cerberus_BossEvent",         boss = Vector3.new(-25437.0, 1448.7, 653.6),     angel = Vector3.new(-25245.8, 1493.0, 682.4) },
+    { world = 23, spawn = "Grand Sea",             bossEvent = "Red Knight_BossEvent",       boss = Vector3.new(-28163.3, 1010.8, 13778.6),   angel = Vector3.new(-28178.2, 1011.1, 13606.7) },
+    { world = 24, spawn = "Ninja Village",         bossEvent = "Bomas_BossEvent",            boss = Vector3.new(-40929.8, 1012.2, 13590.6),   angel = Vector3.new(-40955.4, 1006.9, 13445.5) },
+    { world = 25, spawn = "Swordsman Village",     bossEvent = "Sands Titan_BossEvent",      boss = Vector3.new(-25462.9, 1489.0, 5265.2),    angel = Vector3.new(-25013.4, 1410.1, 5462.5) },
+    { world = 26, spawn = "Walled City",           bossEvent = "Kasak_BossEvent",            boss = Vector3.new(-15913.6, 395.0, 13650.8),    angel = Vector3.new(-16134.1, 394.1, 13812.1) },
+    { world = 27, spawn = "Superhuman Academy",    bossEvent = "No Punch_BossEvent",         boss = Vector3.new(10463.6, 20.2, -32548.5),     angel = Vector3.new(10293.1, 19.3, -32444.9) },
+    { world = 28, spawn = "Shield Kingdom",        bossEvent = "Buryry_BossEvent",           boss = Vector3.new(9789.4, 20.2, -36021.8),      angel = Vector3.new(9924.8, 19.3, -36588.5) },
+    { world = 29, spawn = "Alchemy City",          bossEvent = "Cerberus_BossEvent",         boss = Vector3.new(-25437.0, 1448.7, 653.6),     angel = Vector3.new(-25245.8, 1493.0, 682.4) },
     { world = 30, spawn = "Alchemy City",          bossEvent = "Ogre_BossEvent",             boss = Vector3.new(-23289.7, 1399.7, -3520.9),   angel = Vector3.new(-24201.1, 1400.2, -4002.1) },
 }
 
@@ -711,6 +778,9 @@ function Bosses.startFarmLoop()
     Bosses.farmEnabled = true
     Bosses.kills = 0
     
+    -- Persist farm state so it survives restart + relaunch
+    Bosses.saveFarmState()
+    
     -- Start heartbeat so manager tracks our players
     Bosses.startHeartbeat()
     
@@ -866,6 +936,8 @@ function Bosses.stopFarmLoop()
     Bosses.farmEnabled = false
     Bosses.heartbeatRunning = false
     Bosses.status = "Stopping..."
+    -- Clear saved state so it doesn't auto-resume next time
+    Bosses.clearFarmState()
 end
 
 -- ============================================================================
@@ -873,12 +945,21 @@ end
 -- ============================================================================
 
 function Bosses.checkAutoStart()
+    local NM = getNM()
+    local con = NM and NM.Features and NM.Features.console
+    local function log(msg)
+        if con then con.log(msg) else print("[BossFarm] " .. msg) end
+    end
+
+    -- Check for saved farm state (from a restart + relaunch cycle)
+    local savedState = Bosses.loadFarmState()
+    if savedState and savedState.farmEnabled then
+        log("Saved farm state found — restoring settings and resuming...")
+        Bosses.applyFarmState(savedState)
+        Bosses.autoFarmOnJoin = true
+    end
+
     if Bosses.autoFarmOnJoin then
-        local NM = getNM()
-        local con = NM and NM.Features and NM.Features.console
-        local function log(msg)
-            if con then con.log(msg) else print("[BossFarm] " .. msg) end
-        end
         log("autoFarmOnJoin enabled - starting farm in 5s...")
         Bosses.status = "Auto-starting farm in 5s..."
         task.delay(5, function()
