@@ -117,38 +117,61 @@ function Bosses.restartCurrentServer(callback)
     Bosses.restartServer(server and server.key or "farm", callback)
 end
 
--- Check if we're in a public server and force relaunch
-Bosses.privateServerOnly = false
+-- Check if we're in the correct private server and force relaunch if not
+Bosses.privateServerOnly = true
 Bosses.forcedServerKey = "farm"
 
 function Bosses.checkServerEnforcement()
     if not Bosses.privateServerOnly then return false end
-    
+
     local privateServerId = game.PrivateServerId
-    
+
     if not privateServerId or privateServerId == "" then
         local NM = getNM()
         local con = NM and NM.Features and NM.Features.console
         local function log(msg)
             if con then con.log(msg) else print(msg) end
         end
-        
+
         log("SERVER ENFORCEMENT: In public server! Relaunching to " .. Bosses.forcedServerKey)
         Bosses.status = "Wrong server - relaunching..."
-        
+
+        -- Try direct teleport to the correct private server first
+        local teleported = false
         pcall(function()
-            local HttpService = game:GetService("HttpService")
-            request({
-                Url = Bosses.managerUrl .. "/restart/" .. Bosses.forcedServerKey,
-                Method = "POST",
-                Headers = { ["Content-Type"] = "application/json" },
-                Body = HttpService:JSONEncode({ delay = 3 }),
-            })
+            local server = nil
+            for _, s in ipairs(Bosses.servers) do
+                if s.key == Bosses.forcedServerKey then
+                    server = s
+                    break
+                end
+            end
+            if server then
+                local TS = game:GetService("TeleportService")
+                local Config = getConfig()
+                if Config and Config.LocalPlayer then
+                    TS:TeleportToPrivateServer(game.PlaceId, server.joinCode, {Config.LocalPlayer})
+                    teleported = true
+                end
+            end
         end)
-        
+
+        -- Fallback: ask manager to restart if direct TP failed
+        if not teleported then
+            pcall(function()
+                local HttpService = game:GetService("HttpService")
+                request({
+                    Url = Bosses.managerUrl .. "/restart/" .. Bosses.forcedServerKey,
+                    Method = "POST",
+                    Headers = { ["Content-Type"] = "application/json" },
+                    Body = HttpService:JSONEncode({ delay = 3 }),
+                })
+            end)
+        end
+
         return true
     end
-    
+
     return false
 end
 
@@ -694,21 +717,25 @@ end
 -- TELEPORT
 -- ============================================================================
 
+Bosses.TP_Z_OFFSET = 5  -- offset so we don't spawn directly under the boss
+
 function Bosses.teleportAndWait(worldNum, coords)
     local Config = getConfig()
     local Bridge = getBridge()
     if not Bridge or not Config then return false end
     local data = Bosses.Data[worldNum]
     if not data then return false end
-    
+
+    local offsetCoords = coords + Vector3.new(0, 0, Bosses.TP_Z_OFFSET)
+
     Bridge:FireServer("Teleport", "Spawn", data.spawn)
     task.wait(Bosses.travelTime)
-    
+
     for attempt = 1, 3 do
         local char = Config.LocalPlayer.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
         if hrp then
-            hrp.CFrame = CFrame.new(coords)
+            hrp.CFrame = CFrame.new(offsetCoords)
             return true
         end
         task.wait(1)
@@ -1067,12 +1094,13 @@ function Bosses.startFarmLoop()
 
             Bosses.status = "W" .. target.world .. " " .. target.type .. " [HP: " .. health .. "/" .. maxHealth .. "]"
 
-            -- Stay near target coords
+            -- Stay near target coords (with Z offset)
             pcall(function()
+                local offsetCoords = target.coords + Vector3.new(0, 0, Bosses.TP_Z_OFFSET)
                 local hrp = Config.LocalPlayer.Character
                     and Config.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                if hrp and (hrp.Position - target.coords).Magnitude > DRIFT_RADIUS then
-                    hrp.CFrame = CFrame.new(target.coords)
+                if hrp and (hrp.Position - offsetCoords).Magnitude > DRIFT_RADIUS then
+                    hrp.CFrame = CFrame.new(offsetCoords)
                 end
             end)
 
@@ -1210,12 +1238,23 @@ end
 -- ============================================================================
 
 function Bosses.checkAutoStart()
-    if Bosses.autoFarmOnJoin then
-        local NM = getNM()
-        local con = NM and NM.Features and NM.Features.console
-        local function log(msg)
-            if con then con.log(msg) else print("[BossFarm] " .. msg) end
+    local NM = getNM()
+    local con = NM and NM.Features and NM.Features.console
+    local function log(msg)
+        if con then con.log(msg) else print("[BossFarm] " .. msg) end
+    end
+
+    -- Always enforce correct server at boot (before starting farm)
+    if Bosses.privateServerOnly then
+        log("Checking server enforcement...")
+        if Bosses.checkServerEnforcement() then
+            log("Wrong server detected - teleporting to correct server")
+            return  -- don't start farm, we're leaving this server
         end
+        log("Server OK (private)")
+    end
+
+    if Bosses.autoFarmOnJoin then
         log("autoFarmOnJoin enabled - starting farm in 5s...")
         Bosses.status = "Auto-starting farm in 5s..."
         task.delay(5, function()
