@@ -369,7 +369,7 @@ Bosses.Data = {
     { world = 26, spawn = "Swordsman Village",           bossEvent = "Kasak_BossEvent",            boss = Vector3.new(-15913.6, 395.0, 13650.8),    angel = Vector3.new(-16134.1, 394.1, 13812.1) },
     { world = 27, spawn = "Walled City",    bossEvent = "No Punch_BossEvent",         boss = Vector3.new(10463.6, 20.2, -32548.5),     angel = Vector3.new(10293.1, 19.3, -32444.9) },
     { world = 28, spawn = "Superhuman Academy",        bossEvent = "Buryry_BossEvent",           boss = Vector3.new(9789.4, 20.2, -36021.8),      angel = Vector3.new(9924.8, 19.3, -36588.5) },
-    { world = 29, spawn = "Shield Kingdom,          bossEvent = "Cerberus_BossEvent",         boss = Vector3.new(-25437.0, 1448.7, 653.6),     angel = Vector3.new(-25245.8, 1493.0, 682.4) },
+    { world = 29, spawn = "Shield Kingdom",          bossEvent = "Cerberus_BossEvent",         boss = Vector3.new(-25437.0, 1448.7, 653.6),     angel = Vector3.new(-25245.8, 1493.0, 682.4) },
     { world = 30, spawn = "Alchemy City",          bossEvent = "Ogre_BossEvent",             boss = Vector3.new(-23289.7, 1399.7, -3520.9),   angel = Vector3.new(-24201.1, 1400.2, -4002.1) },
 }
 
