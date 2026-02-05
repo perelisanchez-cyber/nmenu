@@ -43,7 +43,8 @@ function Settings.save()
             accessoryRollLoops = Config.Toggles.accessoryRollLoops,
             utilityToggles = Config.Toggles.utilityToggles,
             potionToggles = Config.Toggles.potionToggles,
-            starAutoMergeSettings = Config.Toggles.starAutoMergeSettings
+            starAutoMergeSettings = Config.Toggles.starAutoMergeSettings,
+            bossToggles = Config.Toggles.bossToggles
         }
         
         local json = HttpService:JSONEncode(data)
@@ -169,6 +170,11 @@ function Settings.load()
     -- Star auto merge settings
     if data.starAutoMergeSettings then
         Config.Toggles.starAutoMergeSettings = data.starAutoMergeSettings
+    end
+    
+    -- Boss tab toggles
+    if data.bossToggles then
+        Config.Toggles.bossToggles = data.bossToggles
     end
     
     return data
