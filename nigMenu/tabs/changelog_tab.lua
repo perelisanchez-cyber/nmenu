@@ -19,6 +19,14 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.14",
+        date = "2026-02-05",
+        entries = {
+            { type = "fixed", text = "Watchdog rejoin now respects per-account default server instead of using global server for all accounts" },
+            { type = "fixed", text = "restart_and_rejoin also respects per-account default server" },
+        }
+    },
+    {
         version = "1.0.13",
         date = "2026-02-05",
         entries = {

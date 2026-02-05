@@ -1137,7 +1137,8 @@ class AccountManager:
 
         def delayed_relaunch():
             time.sleep(delay)
-            self.launch_instance(account_name, server_key)
+            actual_srv = self.get_default_server(account_name) or server_key
+            self.launch_instance(account_name, actual_srv)
 
         threading.Thread(target=delayed_relaunch, daemon=True).start()
         return {"shutdown": shutdown_result, "relaunch_in": delay, "account": account_name, "server": server_key}
@@ -2626,10 +2627,11 @@ class RobloxManagerApp:
             if roblox_username and roblox_username in manager.player_reports:
                 del manager.player_reports[roblox_username]
 
-            result = manager.launch_instance(acc_name, srv_key)
+            actual_srv = manager.get_default_server(acc_name) or srv_key
+            result = manager.launch_instance(acc_name, actual_srv)
             if result.get("success"):
-                self.root.after(0, lambda: self.log(
-                    f"\u2705 {acc_name} relaunched to {srv_key}", "success"))
+                self.root.after(0, lambda a=acc_name, s=actual_srv: self.log(
+                    f"\u2705 {a} relaunched to {s}", "success"))
             else:
                 err = result.get("error", "unknown")
                 self.root.after(0, lambda: self.log(
