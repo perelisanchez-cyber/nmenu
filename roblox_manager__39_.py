@@ -1467,6 +1467,10 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                 if acc_data.get("username", "").lower() == username.lower() or acc_name.lower() == username.lower():
                     found_key = manager.get_default_server(acc_name)
                     break
+            # If no per-account default, use the global "Forced Server" setting from UI
+            if not found_key:
+                ui_settings = load_ui_settings()
+                found_key = ui_settings.get("forcedServer", "farm")
             server_info = SERVERS.get(found_key, {})
             self._respond(200, {
                 "server_key": found_key,
@@ -1502,7 +1506,9 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             launched_at = inst.get("launched_at", 0)
             age = time.time() - launched_at if launched_at else 9999
             server_key = inst.get("server_key", "")
-            expected = manager.get_default_server(found_acc) or "farm"
+            ui_settings = load_ui_settings()
+            fallback_srv = ui_settings.get("forcedServer", "farm")
+            expected = manager.get_default_server(found_acc) or fallback_srv
             self._respond(200, {
                 "ok": pid_alive and server_key == expected,
                 "pid_alive": pid_alive,
