@@ -145,18 +145,119 @@ import psutil
 
 PORT = 8080
 PLACE_ID = 133322550157181
-DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "roblox_manager_data.json")
 
-SERVERS = {}  # Loaded from data file at startup
-
-DEFAULT_SERVERS = {
-    "raid": {
-        "name": "Raid Server",
-        "place_id": 133322550157181,
-        "link_code": "92098597466172680429134969286305",
-        "server_id": 2704892549,
+# Profile-specific configurations
+PROFILES = {
+    "Unlock": {
+        "default_servers": {
+            "raid": {
+                "name": "Raid Server",
+                "place_id": 133322550157181,
+                "link_code": "92098597466172680429134969286305",
+                "server_id": 2704892549,
+            },
+        },
+    },
+    "Shake": {
+        "default_servers": {
+            "raid": {
+                "name": "Raid Server",
+                "place_id": 133322550157181,
+                "link_code": "60273283948218585643111517071147",
+                "server_id": 2895580141,
+            },
+        },
     },
 }
+
+# These will be set after profile selection
+CURRENT_PROFILE = None
+DATA_FILE = None
+DEFAULT_SERVERS = {}
+SERVERS = {}  # Loaded from data file at startup
+
+
+def select_profile():
+    """Show profile selection dialog and return selected profile name."""
+    global CURRENT_PROFILE, DATA_FILE, DEFAULT_SERVERS
+
+    # Create a simple selection dialog
+    select_root = tk.Tk()
+    select_root.title("Select Profile")
+    select_root.configure(bg="#1a1a2e")
+    select_root.resizable(False, False)
+
+    # Center the window
+    window_width = 300
+    window_height = 200
+    screen_width = select_root.winfo_screenwidth()
+    screen_height = select_root.winfo_screenheight()
+    x = (screen_width - window_width) // 2
+    y = (screen_height - window_height) // 2
+    select_root.geometry(f"{window_width}x{window_height}+{x}+{y}")
+
+    selected = [None]  # Use list to allow modification in nested function
+
+    tk.Label(
+        select_root,
+        text="Select Profile",
+        font=("Segoe UI", 16, "bold"),
+        fg="#e94560",
+        bg="#1a1a2e"
+    ).pack(pady=(20, 10))
+
+    tk.Label(
+        select_root,
+        text="Choose which profile to load:",
+        font=("Segoe UI", 10),
+        fg="#aaaaaa",
+        bg="#1a1a2e"
+    ).pack(pady=(0, 15))
+
+    button_frame = tk.Frame(select_root, bg="#1a1a2e")
+    button_frame.pack(pady=10)
+
+    def on_select(profile_name):
+        selected[0] = profile_name
+        select_root.destroy()
+
+    for profile_name in PROFILES.keys():
+        btn = tk.Button(
+            button_frame,
+            text=profile_name,
+            font=("Segoe UI", 12, "bold"),
+            fg="white",
+            bg="#e94560",
+            activebackground="#ff6b6b",
+            activeforeground="white",
+            width=15,
+            height=2,
+            cursor="hand2",
+            command=lambda p=profile_name: on_select(p)
+        )
+        btn.pack(pady=5)
+
+    # Handle window close
+    def on_close():
+        select_root.destroy()
+        sys.exit(0)
+
+    select_root.protocol("WM_DELETE_WINDOW", on_close)
+    select_root.mainloop()
+
+    if selected[0] is None:
+        sys.exit(0)
+
+    # Set global variables based on selection
+    CURRENT_PROFILE = selected[0]
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    DATA_FILE = os.path.join(base_dir, f"roblox_manager_data_{CURRENT_PROFILE.lower()}.json")
+    DEFAULT_SERVERS = PROFILES[CURRENT_PROFILE]["default_servers"]
+
+    print(f"[+] Profile: {CURRENT_PROFILE}")
+    print(f"[+] Data file: {DATA_FILE}")
+
+    return CURRENT_PROFILE
 
 
 def load_servers():
@@ -164,7 +265,7 @@ def load_servers():
     Merges link_code/server_id from DEFAULT_SERVERS into saved configs.
     Clears cached server_id if link_code was added or changed (forces re-resolve)."""
     global SERVERS
-    if os.path.exists(DATA_FILE):
+    if DATA_FILE and os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r") as f:
                 data = json.load(f)
@@ -755,7 +856,7 @@ class AccountManager:
         self.load_data()
 
     def load_data(self):
-        if os.path.exists(DATA_FILE):
+        if DATA_FILE and os.path.exists(DATA_FILE):
             try:
                 with open(DATA_FILE, "r") as f:
                     data = json.load(f)
@@ -1554,8 +1655,7 @@ class AccountManager:
 
 manager = AccountManager()
 
-# Load saved servers from data file
-load_servers()
+# Note: load_servers() is called in main() after profile selection
 
 # Hold the Roblox singleton mutex/event at startup so multi-instance always works
 ensure_multi_instance()
@@ -1945,7 +2045,7 @@ def start_api_server():
 class RobloxManagerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Roblox Manager")
+        self.root.title(f"Roblox Manager - {CURRENT_PROFILE}")
         self.root.geometry("560x820")
         self.root.configure(bg=Theme.bg)
         self.root.resizable(True, True)
@@ -2997,6 +3097,13 @@ class RobloxManagerApp:
 # ============================================================================
 
 def main():
+    # Show profile selection dialog first
+    select_profile()
+
+    # Now load data with the selected profile
+    load_servers()
+    manager.load_data()
+
     api_thread = threading.Thread(target=start_api_server, daemon=True)
     api_thread.start()
     print(f"[+] API on http://localhost:{PORT}")
