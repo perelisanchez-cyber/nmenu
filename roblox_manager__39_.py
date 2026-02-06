@@ -751,7 +751,7 @@ class AccountManager:
         self.player_reports = {}
         # Restart cooldown: prevent concurrent restart requests
         self.last_restart_time = 0
-        self.restart_cooldown = 60  # seconds
+        self.restart_cooldown = 30  # seconds
         self.load_data()
 
     def load_data(self):
