@@ -1131,32 +1131,32 @@ class AccountManager:
                 roblox_username = acc_data.get("username", "")
 
                 # Phase 1: Wait for game to load + Lua to inject + boss loop to start
-                # Game load ~20s, Lua inject ~5s, boss loop start ~5s, first heartbeat up to 15s
-                time.sleep(60)
+                # Heartbeat should arrive ~35-40s after launch
+                time.sleep(30)
 
                 inst = self.instances.get(account_name)
                 if not inst:
                     return  # Instance was cleared (already handled)
 
-                # Phase 2: Aggressive check — every 1 second for 15 seconds
+                # Phase 2: Check every 2 seconds for 20 seconds (10 checks)
                 # If 3 consecutive checks fail, kill and restart
-                # Note: Lua sends heartbeats every 15s, so we accept heartbeats within 30s (2 intervals)
+                # Freshness window is 60s to catch any heartbeat since launch
                 consecutive_failures = 0
-                for check_num in range(15):
-                    time.sleep(1)
+                for check_num in range(10):
+                    time.sleep(2)
 
                     inst = self.instances.get(account_name)
                     if not inst:
                         return  # Instance was cleared
 
                     report = self.player_reports.get(roblox_username)
-                    if report and (time.time() - report["timestamp"]) < 30:
-                        # Got a recent heartbeat — we're good, exit health check
+                    if report and (time.time() - report["timestamp"]) < 60:
+                        # Got a heartbeat — we're good, exit health check
                         print(f"[HEALTH] {account_name}: heartbeat OK, fully loaded")
                         return
                     else:
                         consecutive_failures += 1
-                        print(f"[HEALTH] {account_name}: no heartbeat (strike {consecutive_failures}/3, check {check_num + 1}/15)")
+                        print(f"[HEALTH] {account_name}: no heartbeat (strike {consecutive_failures}/3, check {check_num + 1}/10)")
 
                         if consecutive_failures >= 3:
                             # 3 strikes — kill and restart
@@ -1184,7 +1184,7 @@ class AccountManager:
                                 print(f"[HEALTH] {account_name}: restart failed: {restart_result.get('error')}")
                             return
 
-                # If we got here without a heartbeat after 75s total (60 + 15), kill the process
+                # If we got here without a heartbeat after 50s total (30 + 20), kill the process
                 inst = self.instances.get(account_name)
                 if not inst:
                     return
@@ -1195,7 +1195,7 @@ class AccountManager:
                         p = psutil.Process(pid)
                         if p.is_running():
                             p.kill()
-                            print(f"[HEALTH] {account_name}: killed hung process PID {pid} (no heartbeat after 75s)")
+                            print(f"[HEALTH] {account_name}: killed hung process PID {pid} (no heartbeat after 50s)")
                             self.instances.pop(account_name, None)
                             if roblox_username and roblox_username in self.player_reports:
                                 del self.player_reports[roblox_username]
