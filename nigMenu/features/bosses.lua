@@ -1300,23 +1300,44 @@ function Bosses.fetchMyServer()
         GET /my-server/<username> → { server_key, server_name, link_code }
         Updates Bosses.forcedServerKey so enforcement uses the right server.
     ]]
+    local NM = getNM()
+    local con = NM and NM.Features and NM.Features.console
+    local function log(msg)
+        if con then con.log(msg) else print(msg) end
+    end
+
     local Config = getConfig()
-    if not Config then return end
+    if not Config then
+        log("[FETCH-SERVER] No config, skipping")
+        return
+    end
 
     local username = ""
     pcall(function() username = game:GetService("Players").LocalPlayer.Name end)
-    if username == "" then return end
+    if username == "" then
+        log("[FETCH-SERVER] Could not get username")
+        return
+    end
 
-    pcall(function()
+    log("[FETCH-SERVER] Querying manager for: " .. username)
+
+    local success, err = pcall(function()
         local HttpService = game:GetService("HttpService")
+        local url = Bosses.managerUrl .. "/my-server/" .. HttpService:UrlEncode(username)
+        log("[FETCH-SERVER] URL: " .. url)
+
         local response = request({
-            Url = Bosses.managerUrl .. "/my-server/" .. HttpService:UrlEncode(username),
+            Url = url,
             Method = "GET",
         })
         if response and response.StatusCode == 200 then
             local data = HttpService:JSONDecode(response.Body)
+            log("[FETCH-SERVER] Response: server_key=" .. tostring(data.server_key) .. ", name=" .. tostring(data.server_name))
+
             if data.server_key and data.server_key ~= "" then
                 Bosses.forcedServerKey = data.server_key
+                log("[FETCH-SERVER] Set forcedServerKey = " .. data.server_key)
+
                 -- Also update the servers list if we got a link_code we don't have
                 local found = false
                 for _, s in ipairs(Bosses.servers) do
@@ -1331,10 +1352,19 @@ function Bosses.fetchMyServer()
                         joinCode = data.link_code,
                         key = data.server_key,
                     })
+                    log("[FETCH-SERVER] Added server to list: " .. data.server_key)
                 end
+            else
+                log("[FETCH-SERVER] No server_key in response, keeping default: " .. Bosses.forcedServerKey)
             end
+        else
+            log("[FETCH-SERVER] Request failed: " .. tostring(response and response.StatusCode))
         end
     end)
+
+    if not success then
+        log("[FETCH-SERVER] ERROR: " .. tostring(err))
+    end
 end
 
 function Bosses.checkAutoStart()

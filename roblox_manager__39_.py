@@ -1928,10 +1928,10 @@ class RobloxManagerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Roblox Manager")
-        self.root.geometry("520x720")
+        self.root.geometry("560x820")
         self.root.configure(bg=Theme.bg)
         self.root.resizable(True, True)
-        self.root.minsize(460, 500)
+        self.root.minsize(520, 600)
 
         if IS_WINDOWS:
             try:
