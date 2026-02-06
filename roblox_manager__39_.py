@@ -1653,6 +1653,22 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                 print(f"[RESTART] Waiting {actual_delay}s for server to clear (shutdown_ok={shutdown_ok})...")
                 time.sleep(actual_delay)
 
+                # Final cleanup: kill ALL remaining Roblox processes before relaunch
+                # This catches any that survived the initial kill or spawned during the delay
+                final_killed = 0
+                for p in psutil.process_iter(["pid", "name"]):
+                    try:
+                        if p.info["name"] and "RobloxPlayerBeta" in p.info["name"]:
+                            p.kill()
+                            final_killed += 1
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+                if final_killed:
+                    print(f"[RESTART] Final cleanup: killed {final_killed} remaining Roblox process(es)")
+                    time.sleep(1)
+                # Clear all instance tracking to start fresh
+                manager.instances.clear()
+
                 # Relaunch all accounts (respecting per-account default server)
                 for acc_name in relaunch_accounts:
                     acc_server = manager.get_default_server(acc_name) or server_key
