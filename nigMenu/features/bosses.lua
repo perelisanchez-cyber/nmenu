@@ -77,19 +77,33 @@ function Bosses.restartServer(serverKey, callback)
     local function log(msg)
         if con then con.log(msg) else print(msg) end
     end
-    
+
     local currentServer = Bosses.servers[Bosses.currentServerIndex]
     serverKey = serverKey or (currentServer and currentServer.key) or Bosses.forcedServerKey
     local jobId = game.JobId
-    
-    log("[RESTART] Server: " .. serverKey)
+
+    log("[RESTART] Sending restart request...")
+    log("[RESTART] Server: " .. tostring(serverKey))
+    log("[RESTART] forcedServerKey: " .. tostring(Bosses.forcedServerKey))
+    log("[RESTART] managerUrl: " .. tostring(Bosses.managerUrl))
     log("[RESTART] JobId: " .. tostring(jobId))
-    Bosses.status = "Restarting " .. serverKey .. "..."
-    
-    pcall(function()
+    Bosses.status = "Restarting " .. tostring(serverKey) .. "..."
+
+    -- Check if request function exists
+    if not request then
+        log("[RESTART] ERROR: 'request' function not available in this executor!")
+        Bosses.status = "Restart failed - no HTTP support"
+        if callback then callback(nil) end
+        return
+    end
+
+    local success, err = pcall(function()
         local HttpService = game:GetService("HttpService")
+        local url = Bosses.managerUrl .. "/restart/" .. tostring(serverKey)
+        log("[RESTART] URL: " .. url)
+
         local response = request({
-            Url = Bosses.managerUrl .. "/restart/" .. serverKey,
+            Url = url,
             Method = "POST",
             Headers = { ["Content-Type"] = "application/json" },
             Body = HttpService:JSONEncode({
@@ -97,7 +111,7 @@ function Bosses.restartServer(serverKey, callback)
                 delay = 5,
             }),
         })
-        
+
         if response and response.StatusCode == 200 then
             log("[RESTART] Manager accepted! Server shutting down...")
             log("[RESTART] All accounts relaunching in ~5s")
@@ -107,9 +121,15 @@ function Bosses.restartServer(serverKey, callback)
             log("[RESTART] Body: " .. tostring(response and response.Body))
             Bosses.status = "Restart failed - is manager running?"
         end
-        
+
         if callback then callback(response) end
     end)
+
+    if not success then
+        log("[RESTART] ERROR: " .. tostring(err))
+        Bosses.status = "Restart failed - " .. tostring(err)
+        if callback then callback(nil) end
+    end
 end
 
 -- Legacy alias for server_tab compatibility
