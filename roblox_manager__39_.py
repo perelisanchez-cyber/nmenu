@@ -2173,7 +2173,7 @@ class RobloxManagerApp:
             left.pack(side="left", fill="x", expand=True)
 
             icon_col = Theme.green if running else Theme.text
-            tk.Label(left, text=f"{'ðŸŸ¢' if running else 'ðŸ‘¤'}  {name}", font=("Consolas", 11, "bold"),
+            tk.Label(left, text=f"{'🟢' if running else '👤'}  {name}", font=("Consolas", 11, "bold"),
                      bg=Theme.bg_card, fg=icon_col).pack(anchor="w")
 
             det = f"{acc.get('username', '?')} \u00b7 {acc.get('display_name', '?')}"
