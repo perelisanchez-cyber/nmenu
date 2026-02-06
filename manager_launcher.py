@@ -26,6 +26,17 @@ def main():
     os.chdir(launcher_dir)
     print(f"Working directory: {launcher_dir}")
 
+    # Check for data file
+    data_file = os.path.join(launcher_dir, "roblox_manager_data.json")
+    if os.path.exists(data_file):
+        print(f"Found data file: {data_file}")
+    else:
+        print(f"WARNING: Data file not found at: {data_file}")
+        print("Looking for files in directory:")
+        for f in os.listdir(launcher_dir):
+            if 'manager' in f.lower() or 'data' in f.lower() or f.endswith('.json') or f.endswith('.txt'):
+                print(f"  - {f}")
+
     try:
         # Fetch the latest code from GitHub
         with urllib.request.urlopen(GITHUB_RAW_URL, timeout=30) as response:
