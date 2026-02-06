@@ -19,6 +19,14 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.16",
+        date = "2026-02-06",
+        entries = {
+            { type = "fixed", text = "Boss farm restart now uses per-account default server (forcedServerKey) instead of hardcoded 'farm'" },
+            { type = "fixed", text = "Buddy's accounts will now restart to their own server after all bosses are killed" },
+        }
+    },
+    {
         version = "1.0.15",
         date = "2026-02-05",
         entries = {

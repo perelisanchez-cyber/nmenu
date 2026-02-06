@@ -78,7 +78,8 @@ function Bosses.restartServer(serverKey, callback)
         if con then con.log(msg) else print(msg) end
     end
     
-    serverKey = serverKey or Bosses.servers[Bosses.currentServerIndex].key or "farm"
+    local currentServer = Bosses.servers[Bosses.currentServerIndex]
+    serverKey = serverKey or (currentServer and currentServer.key) or Bosses.forcedServerKey
     local jobId = game.JobId
     
     log("[RESTART] Server: " .. serverKey)
@@ -114,7 +115,7 @@ end
 -- Legacy alias for server_tab compatibility
 function Bosses.restartCurrentServer(callback)
     local server = Bosses.servers[Bosses.currentServerIndex]
-    Bosses.restartServer(server and server.key or "farm", callback)
+    Bosses.restartServer(server and server.key or Bosses.forcedServerKey, callback)
 end
 
 -- Check if we're in the correct private server and force relaunch if not
@@ -1240,8 +1241,8 @@ function Bosses.startFarmLoop()
                     Bosses.status = "All dead -> Restarting server..."
                     task.wait(2)
 
-                    local server = Bosses.servers[Bosses.currentServerIndex]
-                    Bosses.restartServer(server and server.key or "farm")
+                    -- Use forcedServerKey (from manager per-account default) instead of hardcoded "farm"
+                    Bosses.restartServer(Bosses.forcedServerKey)
 
                     Bosses.status = "Waiting for relaunch..."
                     log("Waiting for manager to kill+relaunch...")
