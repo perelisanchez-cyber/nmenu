@@ -17,6 +17,15 @@ def main():
     print("  Fetching latest version from GitHub...")
     print("=" * 50)
 
+    # Get the directory where this launcher script is located
+    # This is where we expect roblox_manager_data.json to be
+    launcher_dir = os.path.dirname(os.path.abspath(__file__))
+    manager_path = os.path.join(launcher_dir, "roblox_manager.py")
+
+    # Change to the launcher's directory so relative paths work
+    os.chdir(launcher_dir)
+    print(f"Working directory: {launcher_dir}")
+
     try:
         # Fetch the latest code from GitHub
         with urllib.request.urlopen(GITHUB_RAW_URL, timeout=30) as response:
@@ -25,8 +34,9 @@ def main():
         print(f"Successfully fetched {len(code):,} bytes")
         print("Starting manager...\n")
 
-        # Execute the fetched code
-        exec(code, {'__name__': '__main__', '__file__': 'roblox_manager.py'})
+        # Execute the fetched code with proper __file__ set to launcher's directory
+        # This ensures DATA_FILE path resolves correctly
+        exec(code, {'__name__': '__main__', '__file__': manager_path})
 
     except urllib.error.URLError as e:
         print(f"Failed to fetch from GitHub: {e}")
