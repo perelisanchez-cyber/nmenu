@@ -189,7 +189,7 @@ def select_profile():
 
     # Center the window
     window_width = 300
-    window_height = 200
+    window_height = 280
     screen_width = select_root.winfo_screenwidth()
     screen_height = select_root.winfo_screenheight()
     x = (screen_width - window_width) // 2
