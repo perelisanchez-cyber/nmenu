@@ -2540,6 +2540,7 @@ class RobloxManagerApp:
         mr = tk.Frame(f, bg=Theme.bg)
         mr.pack(fill="x")
         tk.Label(mr, text="\U0001F513 Multi-Instance \u2014 mutex held automatically", font=("Consolas", 9), bg=Theme.bg, fg=Theme.text_muted).pack(side="left")
+        self._btn(mr, "Kill All & Reset", self._do_kill_all_reset, color="#8b0000", small=True).pack(side="right", padx=(4, 0))
         self._btn(mr, "Clean Handles", self._do_kill_mutex, color=Theme.blue_dim, small=True).pack(side="right")
 
     def _refresh_servers(self):
@@ -2726,6 +2727,45 @@ class RobloxManagerApp:
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
             self.root.after(0, lambda: self.log(f"Closed {c} handle(s)", "success" if c else "warn"))
+        threading.Thread(target=do, daemon=True).start()
+
+    def _do_kill_all_reset(self):
+        """Kill ALL Roblox processes and re-acquire mutex."""
+        self.log("Killing ALL Roblox processes and resetting mutex...")
+        def do():
+            global _held_handles
+            killed = 0
+            # Kill all Roblox processes
+            for p in psutil.process_iter(["pid", "name"]):
+                try:
+                    if p.info["name"] and "RobloxPlayerBeta" in p.info["name"]:
+                        p.kill()
+                        killed += 1
+                        self.root.after(0, lambda pid=p.info["pid"]: self.log(f"Killed PID {pid}"))
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+
+            # Wait a moment for processes to die
+            time.sleep(1)
+
+            # Release our held handles
+            if IS_WINDOWS:
+                kernel32 = ctypes.windll.kernel32
+                for h in _held_handles:
+                    try:
+                        kernel32.CloseHandle(h)
+                    except:
+                        pass
+                _held_handles.clear()
+
+                # Re-acquire mutex
+                hold_mutex()
+
+            # Clear tracked instances
+            manager.instances.clear()
+
+            self.root.after(0, lambda: self.log(f"Killed {killed} process(es), mutex reset!", "success"))
+            self.root.after(0, self._refresh_accounts)
         threading.Thread(target=do, daemon=True).start()
 
     # ----------------------------------------------------------------
