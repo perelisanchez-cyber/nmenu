@@ -849,13 +849,17 @@ end
 function Bosses.startHeartbeat()
     if Bosses.heartbeatRunning then return end
     Bosses.heartbeatRunning = true
-    
+
     local Config = getConfig()
-    
+
+    -- Send initial heartbeat immediately (before loop)
+    -- This ensures manager knows we're alive even if loop has issues
+    Bosses.sendHeartbeat()
+
     task.spawn(function()
         while Bosses.heartbeatRunning and Config and Config.State.running do
-            Bosses.sendHeartbeat()
             task.wait(Bosses.heartbeatInterval)
+            Bosses.sendHeartbeat()
         end
     end)
 end
