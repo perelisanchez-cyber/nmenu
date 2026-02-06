@@ -2692,6 +2692,33 @@ class RobloxManagerApp:
         self.ar_status = tk.Label(arc, text="", font=("Consolas", 9, "bold"), bg=Theme.bg_card, fg=Theme.accent)
         self.ar_status.pack(anchor="w", pady=(8, 0))
 
+        # Window Layout
+        self._lbl(f, "WINDOW LAYOUT").pack(anchor="w", pady=(14, 6))
+        wlc = self._card(f)
+        wlc.pack(fill="x")
+
+        tk.Label(wlc, text="Save window positions & sizes for all running Roblox instances.\nLayouts are restored automatically when accounts relaunch.",
+                 font=("Consolas", 8), bg=Theme.bg_card, fg=Theme.text_dim, justify="left").pack(anchor="w", pady=(0, 8))
+
+        wl_btn_frame = tk.Frame(wlc, bg=Theme.bg_card)
+        wl_btn_frame.pack(fill="x")
+        self._btn(wl_btn_frame, "\U0001F4BE Save All Window Layouts", self._save_all_layouts, color=Theme.blue_dim).pack(side="left")
+        self.wl_status = tk.Label(wl_btn_frame, text="", font=("Consolas", 9), bg=Theme.bg_card, fg=Theme.green)
+        self.wl_status.pack(side="left", padx=(12, 0))
+
+    def _save_all_layouts(self):
+        """Save window layouts for all running instances."""
+        saved = 0
+        for acc_name in manager.accounts:
+            if manager.save_window_layout(acc_name):
+                saved += 1
+        if saved > 0:
+            self.wl_status.configure(text=f"Saved {saved} layout(s)", fg=Theme.green)
+        else:
+            self.wl_status.configure(text="No running instances found", fg=Theme.yellow)
+        # Clear status after 3 seconds
+        self.root.after(3000, lambda: self.wl_status.configure(text=""))
+
     def _refresh_watchdog_accounts(self):
         """Rebuild the account checkboxes for the watchdog."""
         for w in self.ar_acc_frame.winfo_children():
