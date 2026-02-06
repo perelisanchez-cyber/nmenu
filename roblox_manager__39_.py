@@ -52,6 +52,68 @@ if IS_WINDOWS:
     import ctypes.wintypes
 
 # ============================================================================
+# WINDOW LAYOUT HELPERS (Windows only)
+# ============================================================================
+
+def get_window_by_pid(pid):
+    """Find the main window handle (HWND) for a given process ID."""
+    if not IS_WINDOWS:
+        return None
+
+    result = []
+
+    def enum_callback(hwnd, lparam):
+        # Get the PID for this window
+        window_pid = ctypes.wintypes.DWORD()
+        ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(window_pid))
+
+        if window_pid.value == pid:
+            # Check if it's a visible main window
+            if ctypes.windll.user32.IsWindowVisible(hwnd):
+                # Get window title to filter out child windows
+                length = ctypes.windll.user32.GetWindowTextLengthW(hwnd)
+                if length > 0:
+                    result.append(hwnd)
+        return True
+
+    WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
+    ctypes.windll.user32.EnumWindows(WNDENUMPROC(enum_callback), 0)
+
+    return result[0] if result else None
+
+
+def get_window_rect(hwnd):
+    """Get window position and size: returns (x, y, width, height) or None."""
+    if not IS_WINDOWS or not hwnd:
+        return None
+
+    rect = ctypes.wintypes.RECT()
+    if ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+        return {
+            "x": rect.left,
+            "y": rect.top,
+            "width": rect.right - rect.left,
+            "height": rect.bottom - rect.top,
+        }
+    return None
+
+
+def set_window_rect(hwnd, x, y, width, height):
+    """Set window position and size."""
+    if not IS_WINDOWS or not hwnd:
+        return False
+
+    # SWP_NOZORDER = 0x0004 (don't change Z-order)
+    # SWP_NOACTIVATE = 0x0010 (don't activate)
+    SWP_NOZORDER = 0x0004
+    SWP_NOACTIVATE = 0x0010
+    return ctypes.windll.user32.SetWindowPos(
+        hwnd, None, int(x), int(y), int(width), int(height),
+        SWP_NOZORDER | SWP_NOACTIVATE
+    )
+
+
+# ============================================================================
 # AUTO-INSTALL DEPENDENCIES
 # ============================================================================
 
@@ -744,6 +806,70 @@ class AccountManager:
             return self.accounts[name].get("default_server", "")
         return ""
 
+    def save_window_layout(self, name):
+        """Save the current window position/size for an account's Roblox window."""
+        if not IS_WINDOWS:
+            return False
+
+        inst = self.instances.get(name)
+        if not inst or not inst.get("pid"):
+            return False
+
+        pid = inst["pid"]
+        hwnd = get_window_by_pid(pid)
+        if not hwnd:
+            return False
+
+        rect = get_window_rect(hwnd)
+        if not rect:
+            return False
+
+        # Save to account data
+        if name in self.accounts:
+            self.accounts[name]["window_layout"] = rect
+            self.save_data()
+            print(f"[LAYOUT] {name}: saved window layout {rect['width']}x{rect['height']} at ({rect['x']}, {rect['y']})")
+            return True
+        return False
+
+    def restore_window_layout(self, name, max_attempts=10):
+        """Restore window position/size for an account's Roblox window.
+        Waits for window to appear (up to max_attempts seconds)."""
+        if not IS_WINDOWS:
+            return False
+
+        acc = self.accounts.get(name)
+        if not acc:
+            return False
+
+        layout = acc.get("window_layout")
+        if not layout:
+            return False  # No saved layout
+
+        def do_restore():
+            for attempt in range(max_attempts):
+                time.sleep(1)
+
+                inst = self.instances.get(name)
+                if not inst or not inst.get("pid"):
+                    continue
+
+                pid = inst["pid"]
+                hwnd = get_window_by_pid(pid)
+                if not hwnd:
+                    continue
+
+                # Found the window — restore its position/size
+                if set_window_rect(hwnd, layout["x"], layout["y"], layout["width"], layout["height"]):
+                    print(f"[LAYOUT] {name}: restored window layout {layout['width']}x{layout['height']} at ({layout['x']}, {layout['y']})")
+                    return True
+
+            print(f"[LAYOUT] {name}: could not restore layout (window not found after {max_attempts}s)")
+            return False
+
+        threading.Thread(target=do_restore, daemon=True).start()
+        return True
+
     def verify_cookie(self, cookie):
         ctx = ssl.create_default_context()
         req = urllib.request.Request(
@@ -989,6 +1115,8 @@ class AccountManager:
                                     close_singleton_from_process(p.info["pid"])
                                     # Add to pids_before so other concurrent launches don't grab it
                                     pids_before.add(p.info["pid"])
+                                    # Restore saved window layout (runs in background)
+                                    self.restore_window_layout(account_name)
                                     return
                         except (psutil.NoSuchProcess, psutil.AccessDenied):
                             continue
@@ -996,14 +1124,14 @@ class AccountManager:
 
             threading.Thread(target=track_real_pid, daemon=True).start()
 
-            # Launch health check: aggressive early check + fallback long check
+            # Launch health check: aggressive check after short grace period
             # This catches Roblox stuck on "Loading... 100%" screen
             def launch_health_check():
                 acc_data = self.accounts.get(account_name, {})
                 roblox_username = acc_data.get("username", "")
 
-                # Phase 1: Wait for game to load (45 seconds grace period)
-                time.sleep(45)
+                # Phase 1: Wait for game to load (25 seconds grace period)
+                time.sleep(25)
 
                 inst = self.instances.get(account_name)
                 if not inst:
@@ -1021,9 +1149,9 @@ class AccountManager:
 
                     report = self.player_reports.get(roblox_username)
                     if report and (time.time() - report["timestamp"]) < 10:
-                        # Got a recent heartbeat — reset failure count
-                        consecutive_failures = 0
-                        print(f"[HEALTH] {account_name}: heartbeat OK (check {check_num + 1}/15)")
+                        # Got a recent heartbeat — we're good, exit health check
+                        print(f"[HEALTH] {account_name}: heartbeat OK, fully loaded")
+                        return
                     else:
                         consecutive_failures += 1
                         print(f"[HEALTH] {account_name}: no heartbeat (strike {consecutive_failures}/3, check {check_num + 1}/15)")
@@ -1054,43 +1182,23 @@ class AccountManager:
                                 print(f"[HEALTH] {account_name}: restart failed: {restart_result.get('error')}")
                             return
 
-                # If we got here, passed the aggressive check (or got a heartbeat)
-                # Check one more time to confirm we're healthy
-                report = self.player_reports.get(roblox_username)
-                if report and (time.time() - report["timestamp"]) < 30:
-                    print(f"[HEALTH] {account_name}: passed aggressive health check, fully loaded")
-                    return
-
-                # Phase 3: Extended check — wait until 120s total, then final check
-                elapsed = 45 + 15  # Already waited 60 seconds
-                remaining = 120 - elapsed
-                if remaining > 0:
-                    time.sleep(remaining)
-
+                # If we got here without a heartbeat after 40s total (25 + 15), kill the process
                 inst = self.instances.get(account_name)
                 if not inst:
                     return
 
                 pid = inst.get("pid", 0)
-                if not pid:
-                    print(f"[HEALTH] {account_name}: no tracked PID after 120s, skipping final health check")
-                    return
-
-                report = self.player_reports.get(roblox_username)
-                if report and (time.time() - report["timestamp"]) < 60:
-                    return  # Has a fresh heartbeat — fully loaded and running
-
-                # No heartbeat after 120s — kill
-                try:
-                    p = psutil.Process(pid)
-                    if p.is_running():
-                        p.kill()
-                        print(f"[HEALTH] {account_name}: killed hung process PID {pid} (no heartbeat after 120s)")
-                        self.instances.pop(account_name, None)
-                        if roblox_username and roblox_username in self.player_reports:
-                            del self.player_reports[roblox_username]
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
+                if pid:
+                    try:
+                        p = psutil.Process(pid)
+                        if p.is_running():
+                            p.kill()
+                            print(f"[HEALTH] {account_name}: killed hung process PID {pid} (no heartbeat after 40s)")
+                            self.instances.pop(account_name, None)
+                            if roblox_username and roblox_username in self.player_reports:
+                                del self.player_reports[roblox_username]
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
 
             threading.Thread(target=launch_health_check, daemon=True).start()
 
@@ -1237,6 +1345,8 @@ class AccountManager:
             try:
                 p = psutil.Process(instance["pid"])
                 if p.is_running():
+                    # Save window layout before killing (so we can restore on relaunch)
+                    self.save_window_layout(account_name)
                     p.kill()
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
@@ -1673,6 +1783,10 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                 # Fallback: relaunch all accounts
                 if not relaunch_accounts:
                     relaunch_accounts = list(manager.accounts.keys())
+
+            # ── SAVE WINDOW LAYOUTS BEFORE KILLING ──
+            for acc_name in relaunch_accounts:
+                manager.save_window_layout(acc_name)
 
             # ── KILL ROBLOX PROCESSES ──
             killed = 0
@@ -2687,6 +2801,10 @@ class RobloxManagerApp:
                         running, pid, _ = manager.get_instance_status(acc_name, require_heartbeat=require_heartbeat)
 
                         if running:
+                            # Periodically save window layouts for running instances
+                            # This captures user resize/move changes
+                            if check_count[0] % 10 == 0:
+                                manager.save_window_layout(acc_name)
                             # Only log every 5th check to reduce spam
                             if check_count[0] % 5 == 0:
                                 self.root.after(0, lambda a=acc_name, p=pid: self.log(
@@ -2751,6 +2869,8 @@ class RobloxManagerApp:
                 try:
                     p = psutil.Process(inst["pid"])
                     if p.is_running():
+                        # Save window layout before killing (so we can restore on relaunch)
+                        manager.save_window_layout(acc_name)
                         p.kill()
                         self.root.after(0, lambda: self.log(
                             f"\U0001F4A5 Killed stale process for {acc_name} (PID {inst['pid']})"))
