@@ -179,14 +179,23 @@ def load_ui_settings():
     return {}
 
 
-def add_server(name, link_code, place_id=None):
-    """Add a new private server."""
+def add_server(name, link_code, place_id=None, server_id=None):
+    """Add a new private server.
+
+    Args:
+        name: Display name for the server
+        link_code: The privateServerLinkCode from the URL
+        place_id: Optional place ID (defaults to PLACE_ID)
+        server_id: Optional numeric privateServerId/vipServerId for shutdown (if not owned)
+    """
     key = name.lower().replace(" ", "_")
     SERVERS[key] = {
         "name": name,
         "place_id": place_id or PLACE_ID,
         "link_code": link_code,
     }
+    if server_id:
+        SERVERS[key]["server_id"] = server_id
     save_servers()
     return key
 
@@ -2282,7 +2291,7 @@ class RobloxManagerApp:
         dlg = tk.Toplevel(self.root)
         dlg.title("Add Private Server")
         dlg.configure(bg=Theme.bg)
-        dlg.geometry("520x320")
+        dlg.geometry("520x420")
         dlg.transient(self.root)
         dlg.grab_set()
 
@@ -2308,6 +2317,14 @@ class RobloxManagerApp:
         tk.Entry(dlg, textvariable=pid_var, font=("Consolas", 10), bg=Theme.bg_card, fg=Theme.text,
                  insertbackground=Theme.text, relief="flat", bd=0).pack(fill="x", padx=12, pady=(2, 0), ipady=4)
 
+        tk.Label(dlg, text="Server ID (optional — only needed if you DON'T own the server):",
+                 font=("Consolas", 10), bg=Theme.bg, fg=Theme.text).pack(anchor="w", **pad)
+        tk.Label(dlg, text="Get from Roblox API or the privateServerId in a working shutdown request",
+                 font=("Consolas", 8), bg=Theme.bg, fg=Theme.text_dim).pack(anchor="w", padx=12, pady=(0, 0))
+        sid_var = tk.StringVar(value="")
+        tk.Entry(dlg, textvariable=sid_var, font=("Consolas", 10), bg=Theme.bg_card, fg=Theme.text,
+                 insertbackground=Theme.text, relief="flat", bd=0).pack(fill="x", padx=12, pady=(2, 0), ipady=4)
+
         status = tk.Label(dlg, text="", font=("Consolas", 9), bg=Theme.bg, fg=Theme.accent)
         status.pack(anchor="w", padx=12, pady=(8, 0))
 
@@ -2315,6 +2332,7 @@ class RobloxManagerApp:
             name = name_var.get().strip()
             url_text = url_var.get().strip()
             pid_text = pid_var.get().strip()
+            sid_text = sid_var.get().strip()
 
             if not name:
                 status.config(text="Enter a server name", fg="#ff4444")
@@ -2335,7 +2353,16 @@ class RobloxManagerApp:
                 status.config(text="Invalid Place ID", fg="#ff4444")
                 return
 
-            key = add_server(name, link_code, place_id)
+            # Parse optional server_id (numeric privateServerId for shutdown)
+            server_id = None
+            if sid_text:
+                try:
+                    server_id = int(sid_text)
+                except ValueError:
+                    status.config(text="Invalid Server ID (must be a number)", fg="#ff4444")
+                    return
+
+            key = add_server(name, link_code, place_id, server_id)
             status.config(text=f"Added '{name}'!", fg=Theme.green)
             self.root.after(500, lambda: [dlg.destroy(), self._refresh_servers()])
 
