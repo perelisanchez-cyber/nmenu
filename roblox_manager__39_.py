@@ -117,7 +117,7 @@ def load_servers():
                                 new_lc = defaults["link_code"]
                                 if old_lc != new_lc:
                                     saved[key]["link_code"] = new_lc
-                                    # link_code changed or added â€” cached server_id is stale
+                                    # link_code changed or added — cached server_id is stale
                                     if "server_id" in saved[key]:
                                         print(f"[CONFIG] {key}: link_code changed, clearing cached server_id={saved[key]['server_id']}")
                                         del saved[key]["server_id"]
@@ -267,10 +267,10 @@ if IS_WINDOWS:
             return result
         return None
 
-    # â”€â”€ Multi-Instance: Hold the singleton mutex/event BEFORE Roblox launches â”€â”€
+    # ── Multi-Instance: Hold the singleton mutex/event BEFORE Roblox launches ──
     # Same approach as MultiBloxy, ic3w0lf22/ROBLOX_MULTI, Fishstrap/Bloxstrap.
     # Roblox checks for ROBLOX_singletonMutex and ROBLOX_singletonEvent.
-    # If we own them first, Roblox can't claim exclusive access â†’ multi-instance works.
+    # If we own them first, Roblox can't claim exclusive access → multi-instance works.
 
     _held_handles = []  # Global list to keep handles alive for the lifetime of the manager
 
@@ -960,7 +960,7 @@ class AccountManager:
 
             # Wait for new Roblox process to appear, then track its PID
             def track_real_pid():
-                # Wait for Roblox to start (bootstrapper â†’ actual game)
+                # Wait for Roblox to start (bootstrapper → actual game)
                 for attempt in range(20):  # Try for up to 20 seconds
                     time.sleep(1)
                     # Find NEW Roblox processes that weren't running before
@@ -1076,23 +1076,23 @@ class AccountManager:
             if link_code:
                 for srv in servers:
                     if srv.get("accessCode", "") == link_code:
-                        print(f"[DEBUG] Matched by accessCode â†’ vipServerId={srv.get('vipServerId')}")
+                        print(f"[DEBUG] Matched by accessCode → vipServerId={srv.get('vipServerId')}")
                         return srv.get("vipServerId")
             # 2) Match by server name (case-insensitive partial match)
             if server_name:
                 name_lower = server_name.lower()
                 for srv in servers:
                     if name_lower in srv.get("name", "").lower():
-                        print(f"[DEBUG] Matched by name \"{srv.get('name')}\" â†’ vipServerId={srv.get('vipServerId')}")
+                        print(f"[DEBUG] Matched by name \"{srv.get('name')}\" → vipServerId={srv.get('vipServerId')}")
                         return srv.get("vipServerId")
             # 3) If only one server, use it
             if len(servers) == 1:
-                print(f"[DEBUG] Only one server â†’ vipServerId={servers[0].get('vipServerId')}")
+                print(f"[DEBUG] Only one server → vipServerId={servers[0].get('vipServerId')}")
                 return servers[0].get("vipServerId")
-            # 4) Could not auto-match â€” return first one but warn
+            # 4) Could not auto-match — return first one but warn
             if servers:
                 vid = servers[0].get("vipServerId")
-                print(f"[DEBUG] Could not auto-match, using first server â†’ vipServerId={vid}")
+                print(f"[DEBUG] Could not auto-match, using first server → vipServerId={vid}")
                 print(f"[DEBUG] TIP: Set 'server_id' in your server config to the correct vipServerId from the list above")
                 return vid
         except Exception as ex:
@@ -1102,7 +1102,7 @@ class AccountManager:
     def shutdown_server(self, account_name, server_key, game_id=None):
         """Shutdown a private server. Matches the working boss_server.py approach:
         POST to matchmaking shutdown with placeId + privateServerId (numeric).
-        gameId (jobId) is optional â€” sent if available from executor.
+        gameId (jobId) is optional — sent if available from executor.
         If 404, re-resolves privateServerId from API and retries once."""
         if not account_name:
             account_name = next(iter(self.accounts), None)
@@ -1114,7 +1114,7 @@ class AccountManager:
         server = SERVERS[server_key]
         srv_place_id = server.get("place_id") or PLACE_ID
 
-        # Get numeric privateServerId â€” from cache or API
+        # Get numeric privateServerId — from cache or API
         ps_id = server.get("server_id")
         was_cached = ps_id is not None
         if not ps_id:
@@ -1134,25 +1134,25 @@ class AccountManager:
         if game_id:
             body["gameId"] = game_id
 
-        print(f"[SHUTDOWN] {server.get('name',server_key)} â†’ placeId={srv_place_id}, privateServerId={ps_id}, gameId={game_id or 'none'}")
+        print(f"[SHUTDOWN] {server.get('name',server_key)} → placeId={srv_place_id}, privateServerId={ps_id}, gameId={game_id or 'none'}")
         print(f"[SHUTDOWN] Sending POST to shutdown endpoint...")
         result = self._roblox_post(cookie, "https://apis.roblox.com/matchmaking-api/v1/game-instances/shutdown", body)
         print(f"[SHUTDOWN] Result: {result}")
 
-        # If 404 and we used a cached server_id, the ID might be stale â€” re-resolve and retry
+        # If 404 and we used a cached server_id, the ID might be stale — re-resolve and retry
         if result.get("status") == 404 and was_cached:
-            print(f"[SHUTDOWN] 404 with cached server_id={ps_id} â€” re-resolving from API...")
+            print(f"[SHUTDOWN] 404 with cached server_id={ps_id} — re-resolving from API...")
             server.pop("server_id", None)
             new_ps_id = self._get_private_server_id(cookie, srv_place_id, server.get("link_code"), server.get("name"))
             if new_ps_id and new_ps_id != ps_id:
-                print(f"[SHUTDOWN] Resolved NEW server_id={new_ps_id} (was {ps_id}) â€” retrying shutdown...")
+                print(f"[SHUTDOWN] Resolved NEW server_id={new_ps_id} (was {ps_id}) — retrying shutdown...")
                 server["server_id"] = new_ps_id
                 save_servers()
                 body["privateServerId"] = new_ps_id
                 result = self._roblox_post(cookie, "https://apis.roblox.com/matchmaking-api/v1/game-instances/shutdown", body)
                 print(f"[SHUTDOWN] Retry result: {result}")
             elif new_ps_id:
-                print(f"[SHUTDOWN] Re-resolved same server_id={new_ps_id} â€” server likely has no active instance")
+                print(f"[SHUTDOWN] Re-resolved same server_id={new_ps_id} — server likely has no active instance")
                 server["server_id"] = new_ps_id
                 save_servers()
             else:
@@ -1293,7 +1293,7 @@ class AccountManager:
         if not require_heartbeat:
             return True, pid, srv
 
-        # Process is alive â€” but is it actually in-game or stuck on disconnect screen?
+        # Process is alive — but is it actually in-game or stuck on disconnect screen?
         # Check heartbeat freshness: if Lua hasn't reported in, the client is likely dead
         account_data = self.accounts.get(name, {})
         roblox_username = account_data.get("username", "")
@@ -1309,11 +1309,11 @@ class AccountManager:
             # Stale heartbeat = client probably disconnected but process still running
             return False, pid, srv
 
-        # No heartbeat at all â€” check how long ago we launched
+        # No heartbeat at all — check how long ago we launched
         launched_at = inst.get("launched_at", 0)
         age_since_launch = time.time() - launched_at
         if age_since_launch < 90:
-            # Launched less than 90s ago â€” still loading, give it time
+            # Launched less than 90s ago — still loading, give it time
             return True, pid, srv
 
         # Process alive, no heartbeat, been a while since launch = stuck/disconnected
@@ -1445,14 +1445,14 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             self._respond(200, {"status": "ok"})
             return
 
-        # GET /players â€” all player reports from Lua heartbeats
-        # GET /players/<server> â€” players in a specific server
+        # GET /players — all player reports from Lua heartbeats
+        # GET /players/<server> — players in a specific server
         if parts[0] == "players":
             server_key = parts[1] if len(parts) >= 2 else None
             self._respond(200, manager.get_server_players(server_key))
             return
 
-        # GET /missing/<server> â€” which managed accounts are NOT in this server
+        # GET /missing/<server> — which managed accounts are NOT in this server
         if len(parts) >= 2 and parts[0] == "missing":
             self._respond(200, manager.get_missing_accounts(parts[1]))
             return
@@ -1540,7 +1540,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             self._respond(200 if r else 400, {"success": bool(r), "user": r} if r else {"error": "Invalid cookie"})
             return
 
-        # POST /heartbeat â€” Lua reports which players are in the server
+        # POST /heartbeat — Lua reports which players are in the server
         # Body: {username, players: [...], jobId, server}
         if path == "heartbeat":
             result = manager.process_heartbeat(data)
@@ -1554,7 +1554,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             self._respond(200, result)
             return
 
-        # POST /shutdown/<server> â€” shutdown only
+        # POST /shutdown/<server> — shutdown only
         if len(parts) >= 2 and parts[0] == "shutdown":
             server_key = parts[1]
             account = data.get("account") or next(iter(manager.accounts), None)
@@ -1566,22 +1566,22 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             })
             return
 
-        # POST /restart/<server> â€” shutdown + relaunch ALL accounts into server
-        # POST /restart/<account>/<server> â€” shutdown + relaunch specific account
+        # POST /restart/<server> — shutdown + relaunch ALL accounts into server
+        # POST /restart/<account>/<server> — shutdown + relaunch specific account
         # Compatible with boss_server.py: Lua calls POST /restart/farm {gameId: "..."}
-        # NOTE: Shutdown via Roblox API is best-effort â€” requires game owner's cookie.
+        # NOTE: Shutdown via Roblox API is best-effort — requires game owner's cookie.
         # Even if shutdown fails (404), the kill+relaunch still works because:
         # private servers shut down automatically ~30s after all players leave.
         if len(parts) >= 2 and parts[0] == "restart":
             server_key = parts[-1]  # last part is always the server
             specific_account = parts[1] if len(parts) >= 3 else None
 
-            # Attempt shutdown (best-effort â€” may 404 if not game owner)
+            # Attempt shutdown (best-effort — may 404 if not game owner)
             shutdown_acc = specific_account or next(iter(manager.accounts), None)
             shutdown_result = manager.shutdown_server(shutdown_acc, server_key, game_id)
             shutdown_ok = shutdown_result.get("status") == 200 or "error" not in shutdown_result
             if not shutdown_ok:
-                print(f"[API] Restart {server_key}: shutdown failed (this is OK â€” will kill processes instead)")
+                print(f"[API] Restart {server_key}: shutdown failed (this is OK — will kill processes instead)")
                 print(f"[API]   Private server will auto-close ~30s after all players leave")
             else:
                 print(f"[API] Restart {server_key}: shutdown successful")
@@ -1600,7 +1600,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                 if not relaunch_accounts:
                     relaunch_accounts = list(manager.accounts.keys())
 
-            # â"€â"€ KILL ROBLOX PROCESSES â"€â"€
+            # ── KILL ROBLOX PROCESSES ──
             killed = 0
             if specific_account:
                 # Single-account restart: only kill THIS account's tracked PID
@@ -1686,7 +1686,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                 print(f"[VERIFY] {server_key}: {len(present)} present, {len(missing)} missing")
 
                 if missing:
-                    print(f"[VERIFY] Missing accounts: {missing} â€” relaunching...")
+                    print(f"[VERIFY] Missing accounts: {missing} — relaunching...")
                     for acc_name in missing:
                         # Kill stale process if any
                         inst = manager.instances.get(acc_name)
@@ -2196,7 +2196,7 @@ class RobloxManagerApp:
         self._refresh_accounts()
 
     def _launch_dlg(self, name):
-        """Legacy launch dialog â€” kept for server tab usage."""
+        """Legacy launch dialog — kept for server tab usage."""
         opts = list(SERVERS.keys())
         choice = simpledialog.askstring("Launch", f"Server for '{name}'?\n({', '.join(opts)} or empty for public)", initialvalue="farm")
         if choice is None:
@@ -2565,8 +2565,8 @@ class RobloxManagerApp:
             names = list(self.watchdog_accounts.keys())
             srv = self.settings["autoRejoinServer"]
             self.ar_status.configure(
-                text=f"\U0001F6E1 Watching {len(names)} account(s) â†’ {srv} (every {interval_s}s)")
-            self.log(f"Watchdog ON: {', '.join(names)} â†’ {srv} (check every {interval_s}s)")
+                text=f"\U0001F6E1 Watching {len(names)} account(s) → {srv} (every {interval_s}s)")
+            self.log(f"Watchdog ON: {', '.join(names)} → {srv} (check every {interval_s}s)")
 
             # Cooldown: don't relaunch same account within 120s of last relaunch
             relaunch_cooldowns = {}  # {acc_name: timestamp of last relaunch}
@@ -2601,9 +2601,9 @@ class RobloxManagerApp:
                                     f"\U0001F6E1 {a}: alive (pid={p})", "dim"))
                             continue
 
-                        # â”€â”€ Account is NOT running â”€â”€
+                        # ── Account is NOT running ──
 
-                        # Check cooldown â€” don't spam relaunches
+                        # Check cooldown — don't spam relaunches
                         last_relaunch = relaunch_cooldowns.get(acc_name, 0)
                         cooldown_remaining = 120 - (now - last_relaunch)
                         if cooldown_remaining > 0:
@@ -2628,7 +2628,7 @@ class RobloxManagerApp:
                             reason = "no tracked instance (not launched or cleared)"
 
                         self.root.after(0, lambda a=acc_name, r=reason: self.log(
-                            f"\U0001F6A8 {a} is offline ({r}) â€” queued for relaunch", "warn"))
+                            f"\U0001F6A8 {a} is offline ({r}) — queued for relaunch", "warn"))
                         relaunch_cooldowns[acc_name] = now
                         accounts_to_relaunch.append(acc_name)
                     except Exception as ex:
