@@ -996,42 +996,101 @@ class AccountManager:
 
             threading.Thread(target=track_real_pid, daemon=True).start()
 
-            # Launch health check: kill the process if it never sends a heartbeat
+            # Launch health check: aggressive early check + fallback long check
             # This catches Roblox stuck on "Loading... 100%" screen
             def launch_health_check():
-                time.sleep(120)  # Wait 2 minutes for game to fully load + Lua to inject
+                acc_data = self.accounts.get(account_name, {})
+                roblox_username = acc_data.get("username", "")
+
+                # Phase 1: Wait for game to load (45 seconds grace period)
+                time.sleep(45)
 
                 inst = self.instances.get(account_name)
                 if not inst:
                     return  # Instance was cleared (already handled)
 
-                pid = inst.get("pid", 0)
-                if not pid:
-                    # PID tracking failed — can't check or kill directly,
-                    # but orphan cleanup will handle stray processes
-                    print(f"[HEALTH] {account_name}: no tracked PID after 120s, skipping health check")
+                # Phase 2: Aggressive check — every 1 second for 15 seconds
+                # If 3 consecutive checks fail, kill and restart
+                consecutive_failures = 0
+                for check_num in range(15):
+                    time.sleep(1)
+
+                    inst = self.instances.get(account_name)
+                    if not inst:
+                        return  # Instance was cleared
+
+                    report = self.player_reports.get(roblox_username)
+                    if report and (time.time() - report["timestamp"]) < 10:
+                        # Got a recent heartbeat — reset failure count
+                        consecutive_failures = 0
+                        print(f"[HEALTH] {account_name}: heartbeat OK (check {check_num + 1}/15)")
+                    else:
+                        consecutive_failures += 1
+                        print(f"[HEALTH] {account_name}: no heartbeat (strike {consecutive_failures}/3, check {check_num + 1}/15)")
+
+                        if consecutive_failures >= 3:
+                            # 3 strikes — kill and restart
+                            pid = inst.get("pid", 0)
+                            if pid:
+                                try:
+                                    p = psutil.Process(pid)
+                                    if p.is_running():
+                                        p.kill()
+                                        print(f"[HEALTH] {account_name}: killed hung process PID {pid} (3 consecutive heartbeat failures)")
+                                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                    pass
+                            self.instances.pop(account_name, None)
+                            if roblox_username and roblox_username in self.player_reports:
+                                del self.player_reports[roblox_username]
+
+                            # Queue restart after a short delay
+                            time.sleep(2)
+                            print(f"[HEALTH] {account_name}: restarting after health check failure...")
+                            self.cleanup_orphan_processes()
+                            restart_result = self.launch_instance(account_name, server_key)
+                            if restart_result.get("success"):
+                                print(f"[HEALTH] {account_name}: restarted successfully")
+                            else:
+                                print(f"[HEALTH] {account_name}: restart failed: {restart_result.get('error')}")
+                            return
+
+                # If we got here, passed the aggressive check (or got a heartbeat)
+                # Check one more time to confirm we're healthy
+                report = self.player_reports.get(roblox_username)
+                if report and (time.time() - report["timestamp"]) < 30:
+                    print(f"[HEALTH] {account_name}: passed aggressive health check, fully loaded")
                     return
 
-                # Check if we ever got a heartbeat from this account
-                acc_data = self.accounts.get(account_name, {})
-                roblox_username = acc_data.get("username", "")
-                report = self.player_reports.get(roblox_username)
+                # Phase 3: Extended check — wait until 120s total, then final check
+                elapsed = 45 + 15  # Already waited 60 seconds
+                remaining = 120 - elapsed
+                if remaining > 0:
+                    time.sleep(remaining)
 
+                inst = self.instances.get(account_name)
+                if not inst:
+                    return
+
+                pid = inst.get("pid", 0)
+                if not pid:
+                    print(f"[HEALTH] {account_name}: no tracked PID after 120s, skipping final health check")
+                    return
+
+                report = self.player_reports.get(roblox_username)
                 if report and (time.time() - report["timestamp"]) < 60:
                     return  # Has a fresh heartbeat — fully loaded and running
 
-                # No heartbeat after 120s — check if process is still alive
+                # No heartbeat after 120s — kill
                 try:
                     p = psutil.Process(pid)
                     if p.is_running():
                         p.kill()
                         print(f"[HEALTH] {account_name}: killed hung process PID {pid} (no heartbeat after 120s)")
                         self.instances.pop(account_name, None)
-                        # Clear stale heartbeat if any
                         if roblox_username and roblox_username in self.player_reports:
                             del self.player_reports[roblox_username]
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass  # Already dead
+                    pass
 
             threading.Thread(target=launch_health_check, daemon=True).start()
 
