@@ -749,6 +749,9 @@ class AccountManager:
         self.instances = {}
         # Player reports from Lua heartbeats: {reporter_username: {players, jobId, server, timestamp}}
         self.player_reports = {}
+        # Restart cooldown: prevent concurrent restart requests
+        self.last_restart_time = 0
+        self.restart_cooldown = 60  # seconds
         self.load_data()
 
     def load_data(self):
@@ -1761,6 +1764,21 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
         if len(parts) >= 2 and parts[0] == "restart":
             server_key = parts[-1]  # last part is always the server
             specific_account = parts[1] if len(parts) >= 3 else None
+
+            # ── COOLDOWN CHECK: Prevent concurrent restart requests ──
+            # Multiple accounts might send restart at the same time when all bosses die
+            now = time.time()
+            time_since_last = now - manager.last_restart_time
+            if time_since_last < manager.restart_cooldown:
+                remaining = int(manager.restart_cooldown - time_since_last)
+                print(f"[API] Restart {server_key}: SKIPPED (cooldown active, {remaining}s remaining)")
+                self._respond(200, {
+                    "skipped": True,
+                    "reason": "restart_cooldown",
+                    "cooldown_remaining": remaining,
+                })
+                return
+            manager.last_restart_time = now
 
             # Attempt shutdown (best-effort — may 404 if not game owner)
             shutdown_acc = specific_account or next(iter(manager.accounts), None)
