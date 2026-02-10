@@ -368,11 +368,15 @@ local function startRolling(accName, accConfig)
 
                 updateItemUI(accName)
                 return
-            else
+            elseif bestSlot then
                 -- No target found - pick best available and continue
-                print("[Items] No target found, picking best option (slot " .. bestSlot .. ", " .. bestRarity .. ") and continuing...")
+                print("[Items] No target found, picking best option (slot " .. bestSlot .. ", " .. (bestRarity or "Unknown") .. ") and continuing...")
                 task.wait(PICK_DELAY)
                 doPick(state.currentRouletteId, bestSlot)
+                task.wait(ROLL_DELAY)
+            else
+                -- No options available at all (shouldn't happen, but handle it)
+                print("[Items] No options available in roulette, retrying...")
                 task.wait(ROLL_DELAY)
             end
 
