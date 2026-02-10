@@ -3140,8 +3140,41 @@ class RobloxManagerApp:
     # SETTINGS TAB
     # ----------------------------------------------------------------
     def _build_settings_tab(self):
-        f = tk.Frame(self.content, bg=Theme.bg)
-        self.tab_frames["settings"] = f
+        # Create a scrollable container for settings
+        outer_frame = tk.Frame(self.content, bg=Theme.bg)
+        self.tab_frames["settings"] = outer_frame
+
+        # Canvas for scrolling
+        canvas = tk.Canvas(outer_frame, bg=Theme.bg, highlightthickness=0)
+        scrollbar = tk.Scrollbar(outer_frame, orient="vertical", command=canvas.yview)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Inner frame that holds all content
+        f = tk.Frame(canvas, bg=Theme.bg)
+        canvas_window = canvas.create_window((0, 0), window=f, anchor="nw")
+
+        # Configure canvas scrolling
+        def configure_scroll(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            # Make the inner frame match the canvas width
+            canvas.itemconfig(canvas_window, width=event.width)
+
+        canvas.bind("<Configure>", configure_scroll)
+
+        # Enable mousewheel scrolling only when hovering over this canvas
+        def on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        def bind_mousewheel(event):
+            canvas.bind_all("<MouseWheel>", on_mousewheel)
+
+        def unbind_mousewheel(event):
+            canvas.unbind_all("<MouseWheel>")
+
+        outer_frame.bind("<Enter>", bind_mousewheel)
+        outer_frame.bind("<Leave>", unbind_mousewheel)
 
         # Private Server Only
         self._lbl(f, "SERVER ENFORCEMENT").pack(anchor="w", pady=(0, 6))
@@ -3244,6 +3277,9 @@ class RobloxManagerApp:
         self._btn(wl_btn_frame, "\U0001F4BE Save All Window Layouts", self._save_all_layouts, color=Theme.blue_dim).pack(side="left")
         self.wl_status = tk.Label(wl_btn_frame, text="", font=("Consolas", 9), bg=Theme.bg_card, fg=Theme.green)
         self.wl_status.pack(side="left", padx=(12, 0))
+
+        # Bottom spacer to ensure scrolling shows all content
+        tk.Frame(f, bg=Theme.bg, height=20).pack(fill="x")
 
     def _save_all_layouts(self):
         """Save window layouts for all running instances."""
