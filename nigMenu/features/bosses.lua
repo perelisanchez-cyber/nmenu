@@ -969,6 +969,156 @@ function Bosses.scanServerFolder()
 end
 
 -- ============================================================================
+-- DEBUG: VIEW ALL BOSS SPAWN TIMES
+-- ============================================================================
+
+function Bosses.debugBossSpawnTimes()
+    --[[
+        Scan ALL bosses in server folder (including not-yet-spawned ones).
+        Display spawn times ordered by time remaining.
+        Opens console and shows formatted output.
+    ]]
+    local NM = getNM()
+    local con = NM and NM.Features and NM.Features.console
+    local function log(msg)
+        if con then con.log(msg) else print("[BossDebug] " .. msg) end
+    end
+
+    if con then con.clear(); con.show() end
+
+    local serverFolder = getServerBossFolder()
+    if not serverFolder then
+        log("ERROR: Cannot find workspace.Server.Enemies.WorldBoss")
+        return
+    end
+
+    local now = nil
+    pcall(function() now = workspace:GetServerTimeNow() end)
+    if not now then now = os.time() end
+
+    log("====== BOSS SPAWN TIMES ======")
+    log("Server Time: " .. string.format("%.1f", now))
+    log("")
+
+    local allBosses = {}
+
+    pcall(function()
+        for _, mapFolder in ipairs(serverFolder:GetChildren()) do
+            local data = spawnToData[mapFolder.Name]
+            if not data then continue end
+
+            for _, part in ipairs(mapFolder:GetChildren()) do
+                if not part:IsA("BasePart") then continue end
+
+                local health = part:GetAttribute("Health") or 0
+                local maxHealth = part:GetAttribute("MaxHealth") or 0
+                local died = part:GetAttribute("Died") or false
+                local spawnTime = part:GetAttribute("spawnTime") or 0
+                local despawnTime = part:GetAttribute("despawnTime") or 0
+                local isAngel = part.Name:find("BossAngel") ~= nil
+
+                local timeUntilSpawn = spawnTime - now
+                local timeUntilDespawn = despawnTime - now
+
+                local status = "?"
+                if died or health <= 0 then
+                    status = "DEAD"
+                elseif spawnTime > now then
+                    status = "SPAWNING"
+                else
+                    status = "ALIVE"
+                end
+
+                table.insert(allBosses, {
+                    world = data.world,
+                    type = isAngel and "Angel" or "Boss",
+                    name = isAngel and "Boss Angel" or data.bossEvent:gsub("_BossEvent", ""),
+                    spawn = data.spawn,
+                    health = health,
+                    maxHealth = maxHealth,
+                    status = status,
+                    spawnTime = spawnTime,
+                    despawnTime = despawnTime,
+                    timeUntilSpawn = timeUntilSpawn,
+                    timeUntilDespawn = timeUntilDespawn,
+                    coords = isAngel and data.angel or data.boss,
+                    serverPart = part,
+                })
+            end
+        end
+    end)
+
+    -- Sort by time until spawn (spawning soon first, then alive, then dead)
+    table.sort(allBosses, function(a, b)
+        -- Alive bosses first
+        if a.status == "ALIVE" and b.status ~= "ALIVE" then return true end
+        if a.status ~= "ALIVE" and b.status == "ALIVE" then return false end
+        -- Then spawning soon
+        if a.status == "SPAWNING" and b.status == "SPAWNING" then
+            return a.timeUntilSpawn < b.timeUntilSpawn
+        end
+        if a.status == "SPAWNING" and b.status ~= "SPAWNING" then return true end
+        if a.status ~= "SPAWNING" and b.status == "SPAWNING" then return false end
+        -- Then by world
+        return a.world < b.world
+    end)
+
+    local aliveCount, spawningCount, deadCount = 0, 0, 0
+
+    for _, boss in ipairs(allBosses) do
+        local timeStr = ""
+        if boss.status == "ALIVE" then
+            aliveCount = aliveCount + 1
+            timeStr = string.format("HP: %d/%d | Despawn: %.0fs", boss.health, boss.maxHealth, boss.timeUntilDespawn)
+        elseif boss.status == "SPAWNING" then
+            spawningCount = spawningCount + 1
+            local mins = math.floor(boss.timeUntilSpawn / 60)
+            local secs = math.floor(boss.timeUntilSpawn % 60)
+            timeStr = string.format("Spawns in: %dm %ds", mins, secs)
+        else
+            deadCount = deadCount + 1
+            timeStr = "Dead"
+        end
+
+        local icon = boss.status == "ALIVE" and "🟢" or (boss.status == "SPAWNING" and "🟡" or "🔴")
+        log(string.format("%s W%d %s: %s | %s", icon, boss.world, boss.type, boss.name, timeStr))
+    end
+
+    log("")
+    log(string.format("Summary: %d Alive | %d Spawning | %d Dead", aliveCount, spawningCount, deadCount))
+    log("====== END ======")
+
+    -- Store for potential teleport use
+    Bosses._debugBossList = allBosses
+    return allBosses
+end
+
+function Bosses.teleportToDebugBoss(index)
+    --[[
+        Teleport to a boss from the debug list by index.
+    ]]
+    if not Bosses._debugBossList or #Bosses._debugBossList == 0 then
+        print("[BossDebug] No boss list - run debugBossSpawnTimes first")
+        return false
+    end
+
+    local boss = Bosses._debugBossList[index]
+    if not boss then
+        print("[BossDebug] Invalid index: " .. tostring(index))
+        return false
+    end
+
+    local Config = getConfig()
+    if not Config then return false end
+
+    local success = Bosses.teleportAndWait(boss.world, boss.coords)
+    if success then
+        print(string.format("[BossDebug] Teleported to W%d %s: %s", boss.world, boss.type, boss.name))
+    end
+    return success
+end
+
+-- ============================================================================
 -- AUTO-FARM LOOP (with manager restart integration)
 -- ============================================================================
 

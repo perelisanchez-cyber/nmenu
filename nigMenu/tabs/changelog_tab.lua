@@ -19,6 +19,14 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.19",
+        date = "2026-02-10",
+        entries = {
+            { type = "added", text = "View Boss Times button — shows all boss spawn timers sorted by time remaining" },
+            { type = "added", text = "Debug console shows alive (green), spawning (yellow), dead (red) bosses with countdown" },
+        }
+    },
+    {
         version = "1.0.18",
         date = "2026-02-10",
         entries = {

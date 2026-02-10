@@ -275,9 +275,9 @@ function BossesTab.init()
         Parent = controlCard
     })
     
-    -- START / STOP button
+    -- START / STOP button (left side)
     local farmBtn = Utils.create('TextButton', {
-        Size = UDim2.new(1, -24, 0, 32),
+        Size = UDim2.new(0.65, -16, 0, 32),
         Position = UDim2.new(0, 12, 0, 52),
         BackgroundColor3 = Color3.fromRGB(60, 160, 60),
         BorderSizePixel = 0,
@@ -288,6 +288,26 @@ function BossesTab.init()
         Parent = controlCard
     })
     Utils.addCorner(farmBtn, 6)
+
+    -- VIEW BOSS TIMES button (right side)
+    local viewTimesBtn = Utils.create('TextButton', {
+        Size = UDim2.new(0.35, -16, 0, 32),
+        Position = UDim2.new(0.65, 4, 0, 52),
+        BackgroundColor3 = Color3.fromRGB(80, 120, 180),
+        BorderSizePixel = 0,
+        Text = '🕐 Times',
+        TextColor3 = Color3.new(1, 1, 1),
+        TextSize = 13,
+        Font = Enum.Font.GothamBold,
+        Parent = controlCard
+    })
+    Utils.addCorner(viewTimesBtn, 6)
+
+    viewTimesBtn.MouseButton1Click:Connect(function()
+        if bosses and bosses.debugBossSpawnTimes then
+            bosses.debugBossSpawnTimes()
+        end
+    end)
     
     farmBtn.MouseButton1Click:Connect(function()
         if not bosses then return end
