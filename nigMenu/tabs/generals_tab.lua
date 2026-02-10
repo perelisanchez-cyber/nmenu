@@ -207,13 +207,19 @@ local function selectGeneral(uuid, name, btn)
     local Config = getConfig()
     local T = Config and Config.Theme
 
-    selectedGeneralUUID = uuid
-    selectedGeneralName = name
+    -- Toggle: if clicking already selected general, deselect it
+    if selectedGeneralUUID == uuid then
+        selectedGeneralUUID = nil
+        selectedGeneralName = nil
+    else
+        selectedGeneralUUID = uuid
+        selectedGeneralName = name
+    end
 
     -- Update button visual states
     for _, info in pairs(generalsList) do
         if info.btn and info.btn.Parent then
-            if info.uuid == uuid then
+            if info.uuid == selectedGeneralUUID then
                 info.btn.BackgroundColor3 = Color3.fromRGB(60, 160, 60)
                 info.btn.Text = "Selected"
             else
@@ -260,6 +266,20 @@ local function startRolling()
             if rarity and name then
                 rarityCount[rarity] = (rarityCount[rarity] or 0) + 1
 
+                -- Directly update the current trait label with fresh data
+                if currentTraitLabel and currentTraitLabel.Parent then
+                    currentTraitLabel.Text = "Current: " .. rarity .. " - " .. name
+                    local colors = {
+                        D = Color3.fromRGB(150, 150, 150),
+                        C = Color3.fromRGB(100, 200, 100),
+                        B = Color3.fromRGB(100, 150, 255),
+                        A = Color3.fromRGB(200, 100, 255),
+                        S = Color3.fromRGB(255, 200, 50),
+                        SS = Color3.fromRGB(255, 80, 80)
+                    }
+                    currentTraitLabel.TextColor3 = colors[rarity] or Color3.fromRGB(200, 200, 200)
+                end
+
                 -- Check if we hit target
                 local hitTarget = false
                 if targetRarity == "SS" and rarity == "SS" then
@@ -288,6 +308,12 @@ local function startRolling()
                     local rps = rollCount / elapsed
                     print(string.format("[Generals] %d rolls | %.1f rolls/sec | Current: %s-%s",
                         rollCount, rps, rarity, name))
+                end
+            else
+                -- If we couldn't read the trait, show that
+                if currentTraitLabel and currentTraitLabel.Parent then
+                    currentTraitLabel.Text = "Current: Reading..."
+                    currentTraitLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
                 end
             end
 
