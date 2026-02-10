@@ -1435,8 +1435,10 @@ class AccountManager:
             else:
                 subprocess.Popen(["xdg-open", launch_url])
 
-            # Store initial instance info
-            self.instances[account_name] = {"pid": 0, "server_key": server_key, "launched_at": time.time()}
+            # Store initial instance info with unique launch_id
+            # The launch_id lets health check threads know if they're stale
+            launch_id = f"{account_name}_{int(time.time() * 1000)}"
+            self.instances[account_name] = {"pid": 0, "server_key": server_key, "launched_at": time.time(), "launch_id": launch_id}
 
             # Wait for new Roblox process to appear, then track its PID
             def track_real_pid():
@@ -1472,6 +1474,8 @@ class AccountManager:
             # Launch health check: aggressive check after grace period
             # This catches Roblox stuck on "Loading... 100%" screen
             def launch_health_check():
+                # Capture launch_id at start - if it changes, this thread is stale
+                my_launch_id = launch_id
                 acc_data = self.accounts.get(account_name, {})
                 roblox_username = acc_data.get("username", "")
 
@@ -1482,6 +1486,8 @@ class AccountManager:
                 inst = self.instances.get(account_name)
                 if not inst:
                     return  # Instance was cleared (already handled)
+                if inst.get("launch_id") != my_launch_id:
+                    return  # Instance was relaunched, this health check is stale
 
                 # Phase 2: Check every 3 seconds for 30 seconds (10 checks)
                 # If 5 consecutive checks fail, kill and restart
@@ -1493,6 +1499,8 @@ class AccountManager:
                     inst = self.instances.get(account_name)
                     if not inst:
                         return  # Instance was cleared
+                    if inst.get("launch_id") != my_launch_id:
+                        return  # Instance was relaunched, this health check is stale
 
                     report = self.player_reports.get(roblox_username)
                     if report and (time.time() - report["timestamp"]) < 90:
@@ -1533,6 +1541,8 @@ class AccountManager:
                 inst = self.instances.get(account_name)
                 if not inst:
                     return
+                if inst.get("launch_id") != my_launch_id:
+                    return  # Instance was relaunched, this health check is stale
 
                 pid = inst.get("pid", 0)
                 if pid:
