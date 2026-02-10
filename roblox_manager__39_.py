@@ -936,9 +936,9 @@ class AccountManager:
             return True
         return False
 
-    def restore_window_layout(self, name, max_attempts=10):
+    def restore_window_layout(self, name, max_attempts=30):
         """Restore window position/size for an account's Roblox window.
-        Waits for window to appear (up to max_attempts seconds)."""
+        Polls rapidly for window to appear (every 0.3s, up to ~10 seconds total)."""
         if not IS_WINDOWS:
             return False
 
@@ -952,7 +952,7 @@ class AccountManager:
 
         def do_restore():
             for attempt in range(max_attempts):
-                time.sleep(1)
+                time.sleep(0.3)  # Poll every 300ms for faster restore
 
                 inst = self.instances.get(name)
                 if not inst or not inst.get("pid"):
@@ -968,7 +968,7 @@ class AccountManager:
                     print(f"[LAYOUT] {name}: restored window layout {layout['width']}x{layout['height']} at ({layout['x']}, {layout['y']})")
                     return True
 
-            print(f"[LAYOUT] {name}: could not restore layout (window not found after {max_attempts}s)")
+            print(f"[LAYOUT] {name}: could not restore layout (window not found after {max_attempts * 0.3:.1f}s)")
             return False
 
         threading.Thread(target=do_restore, daemon=True).start()
@@ -2985,6 +2985,14 @@ class RobloxManagerApp:
 
                 for acc_name in list(self.watchdog_accounts.keys()):
                     try:
+                        # OPTIMIZATION: Skip full status check if heartbeat is very fresh (< 10s old)
+                        acc_data = manager.accounts.get(acc_name, {})
+                        roblox_username = acc_data.get("username", "")
+                        report = manager.player_reports.get(roblox_username)
+                        if report and (time.time() - report["timestamp"]) < 10:
+                            # Very fresh heartbeat - definitely alive, skip expensive checks
+                            continue
+
                         running, pid, _ = manager.get_instance_status(acc_name, require_heartbeat=require_heartbeat)
 
                         if running:
@@ -3031,13 +3039,18 @@ class RobloxManagerApp:
                     except Exception as ex:
                         self.root.after(0, lambda e=str(ex): self.log(f"Watchdog error: {e}", "error"))
 
-                # Relaunch all offline accounts SEQUENTIALLY in one thread
+                # Relaunch all offline accounts IN PARALLEL
                 if accounts_to_relaunch:
-                    def relaunch_all():
-                        for acc_name in accounts_to_relaunch:
-                            self._watchdog_rejoin(acc_name, srv)
-                            time.sleep(5)  # Wait 5s between launches for PID tracking
-                    threading.Thread(target=relaunch_all, daemon=True).start()
+                    def relaunch_one(acc_name):
+                        self._watchdog_rejoin(acc_name, srv)
+
+                    # Launch all accounts simultaneously in separate threads
+                    threads = []
+                    for acc_name in accounts_to_relaunch:
+                        t = threading.Thread(target=relaunch_one, args=(acc_name,), daemon=True)
+                        threads.append(t)
+                        t.start()
+                        time.sleep(0.5)  # Tiny stagger to avoid overwhelming mutex handling
 
                 self.auto_restart_job = self.root.after(interval_s * 1000, check)
             self.auto_restart_job = self.root.after(interval_s * 1000, check)
