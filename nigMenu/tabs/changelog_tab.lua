@@ -19,6 +19,18 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.21",
+        date = "2026-02-10",
+        entries = {
+            { type = "added", text = "Generals tab — auto-roll traits until target rarity (S or SS) is achieved" },
+            { type = "added", text = "Trait roller hides roulette UI during rolling for faster performance" },
+            { type = "added", text = "Boss Times debug console in Config tab (visible when debug mode enabled)" },
+            { type = "fixed", text = "Heartbeat requirement toggle now properly respected by orphan cleanup" },
+            { type = "removed", text = "ServerHopper tab removed (functionality available in Bosses tab)" },
+            { type = "removed", text = "Times button removed from Bosses tab (moved to Config debug tools)" },
+        }
+    },
+    {
         version = "1.0.20",
         date = "2026-02-10",
         entries = {
