@@ -19,6 +19,16 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.22",
+        date = "2026-02-10",
+        entries = {
+            { type = "fixed", text = "Generals tab selection toggle — clicking selected general now properly deselects it" },
+            { type = "fixed", text = "Current trait label now updates in real-time during rolling" },
+            { type = "fixed", text = "Bridge fallback for trait rolling — directly accesses ReplicatedStorage.Bridge if needed" },
+            { type = "added", text = "Debug output for trait roller to troubleshoot rolling issues" },
+        }
+    },
+    {
         version = "1.0.21",
         date = "2026-02-10",
         entries = {
