@@ -2963,6 +2963,7 @@ class RobloxManagerApp:
 
             # Cooldown: don't relaunch same account within 120s of last relaunch
             relaunch_cooldowns = {}  # {acc_name: timestamp of last relaunch}
+            currently_launching = set()  # Accounts currently being launched (prevents double-launch)
             check_count = [0]
 
             def check():
@@ -3008,6 +3009,10 @@ class RobloxManagerApp:
 
                         # ── Account is NOT running ──
 
+                        # Skip if already being launched (prevents double-launch)
+                        if acc_name in currently_launching:
+                            continue
+
                         # Check cooldown — don't spam relaunches
                         last_relaunch = relaunch_cooldowns.get(acc_name, 0)
                         cooldown_remaining = 120 - (now - last_relaunch)
@@ -3042,13 +3047,16 @@ class RobloxManagerApp:
                 # Relaunch all offline accounts IN PARALLEL
                 if accounts_to_relaunch:
                     def relaunch_one(acc_name):
-                        self._watchdog_rejoin(acc_name, srv)
+                        try:
+                            self._watchdog_rejoin(acc_name, srv)
+                        finally:
+                            # Remove from launching set when done (success or failure)
+                            currently_launching.discard(acc_name)
 
                     # Launch all accounts simultaneously in separate threads
-                    threads = []
                     for acc_name in accounts_to_relaunch:
+                        currently_launching.add(acc_name)  # Mark as launching
                         t = threading.Thread(target=relaunch_one, args=(acc_name,), daemon=True)
-                        threads.append(t)
                         t.start()
                         time.sleep(0.5)  # Tiny stagger to avoid overwhelming mutex handling
 
