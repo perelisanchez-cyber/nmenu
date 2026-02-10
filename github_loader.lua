@@ -146,14 +146,14 @@ end
 NM.Tabs = {}
 
 for _, t in ipairs({
-    { f = "auto_tab.lua",     n = "Auto" },
-    { f = "upgrades_tab.lua", n = "Upgrades" },
-    { f = "items_tab.lua",    n = "Items" },
-    { f = "merger_tab.lua",   n = "Merger" },
-    { f = "bosses_tab.lua",   n = "Bosses" },
-    { f = "server_tab.lua",   n = "ServerHopper" },
-    { f = "utils_tab.lua",    n = "Utils" },
-    { f = "config_tab.lua",   n = "Config" },
+    { f = "auto_tab.lua",      n = "Auto" },
+    { f = "upgrades_tab.lua",  n = "Upgrades" },
+    { f = "generals_tab.lua",  n = "Generals" },
+    { f = "items_tab.lua",     n = "Items" },
+    { f = "merger_tab.lua",    n = "Merger" },
+    { f = "bosses_tab.lua",    n = "Bosses" },
+    { f = "utils_tab.lua",     n = "Utils" },
+    { f = "config_tab.lua",    n = "Config" },
     { f = "changelog_tab.lua", n = "Changelog" },
 }) do
     local m = fetch("tabs/" .. t.f)
