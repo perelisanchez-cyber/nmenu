@@ -131,27 +131,12 @@ local function rollTrait(uuid)
 end
 
 local function hideRouletteUI()
-    local player = game:GetService("Players").LocalPlayer
+    -- Only hide the roulette popup, don't modify any modules
     pcall(function()
+        local player = game:GetService("Players").LocalPlayer
         local rouletteGui = player.PlayerGui:FindFirstChild("RouletteRoll")
         if rouletteGui then
             rouletteGui.Enabled = false
-        end
-    end)
-
-    pcall(function()
-        local starBlur = game:GetService("Lighting"):FindFirstChild("StarBlur")
-        if starBlur then
-            starBlur.Enabled = false
-        end
-    end)
-
-    -- Try to disable the spin animation
-    pcall(function()
-        local spinRoulette = player.PlayerScripts.MetaService.Client:FindFirstChild("SpinRoulette")
-        if spinRoulette then
-            local module = require(spinRoulette)
-            module.CreateTrait = function() end
         end
     end)
 end
