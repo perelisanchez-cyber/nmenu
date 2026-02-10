@@ -1256,12 +1256,13 @@ function Bosses.startFarmLoop()
 
             -- ============================================================
             -- RESTART CHECK
+            -- Uses scanServerFolder() only (ground truth from server attributes)
+            -- getEventTargets() is not reliable for death detection (events lag)
             -- ============================================================
             if Bosses.kills > 0 and Bosses.autoRestartOnKill then
                 local remaining = Bosses.scanServerFolder()
-                local eventRemaining = Bosses.getEventTargets()
-                if #remaining == 0 and #eventRemaining == 0 then
-                    log("All targets dead - RESTARTING SERVER!")
+                if #remaining == 0 then
+                    log("All targets dead (kills=" .. Bosses.kills .. ") - RESTARTING SERVER!")
                     Bosses.status = "All dead -> Restarting server..."
                     task.wait(2)
 
