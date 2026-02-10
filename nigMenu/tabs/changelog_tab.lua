@@ -19,6 +19,15 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.26",
+        date = "2026-02-10",
+        entries = {
+            { type = "added", text = "New Swords tab — combines Enchants, Trait Re-roller, and Splitter in one place" },
+            { type = "added", text = "Sword Trait Re-roller — roulette-based, rolls 5 options and picks best S/SS trait" },
+            { type = "changed", text = "Upgrades tab now only shows Generals upgrades — sword features moved to Swords tab" },
+        }
+    },
+    {
         version = "1.0.25",
         date = "2026-02-10",
         entries = {

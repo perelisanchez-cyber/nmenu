@@ -516,6 +516,7 @@ function UI.createMainWindow()
         { 'Auto',     '⚡' },
         { 'Upgrades', '⚔' },
         { 'Generals', '🎲' },
+        { 'Swords',   '🗡️' },
         { 'Items',    '🎒' },
         { 'Merger',   '⭐' },
         { 'Bosses',   '💀' },

@@ -255,6 +255,7 @@ local tabModules = {
     { file = "auto_tab.lua", name = "Auto" },
     { file = "upgrades_tab.lua", name = "Upgrades" },
     { file = "generals_tab.lua", name = "Generals" },
+    { file = "swords_tab.lua", name = "Swords" },
     { file = "items_tab.lua", name = "Items" },
     { file = "merger_tab.lua", name = "Merger" },
     { file = "bosses_tab.lua", name = "Bosses" },

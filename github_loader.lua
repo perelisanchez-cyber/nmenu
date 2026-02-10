@@ -149,6 +149,7 @@ for _, t in ipairs({
     { f = "auto_tab.lua",      n = "Auto" },
     { f = "upgrades_tab.lua",  n = "Upgrades" },
     { f = "generals_tab.lua",  n = "Generals" },
+    { f = "swords_tab.lua",    n = "Swords" },
     { f = "items_tab.lua",     n = "Items" },
     { f = "merger_tab.lua",    n = "Merger" },
     { f = "bosses_tab.lua",    n = "Bosses" },
