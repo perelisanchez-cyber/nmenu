@@ -97,6 +97,15 @@ local function rollTrait(uuid)
     local Bridge = getBridge()
     if Bridge then
         Bridge:FireServer("Traits", "RollGeneralTrait", uuid)
+    else
+        -- Fallback: directly access ReplicatedStorage.Bridge
+        local RS = game:GetService("ReplicatedStorage")
+        local directBridge = RS:FindFirstChild("Bridge")
+        if directBridge then
+            directBridge:FireServer("Traits", "RollGeneralTrait", uuid)
+        else
+            warn("[Generals] Bridge not found! Cannot roll traits.")
+        end
     end
 end
 
@@ -238,6 +247,9 @@ local function startRolling()
         return
     end
 
+    print("[Generals] Starting trait roller for UUID: " .. selectedGeneralUUID)
+    print("[Generals] Target rarity: " .. targetRarity)
+
     isRolling = true
     rollCount = 0
     startTime = tick()
@@ -249,8 +261,11 @@ local function startRolling()
     task.spawn(function()
         local Config = getConfig()
 
+        print("[Generals] Rolling loop started...")
+
         while isRolling and Config and Config.State.running do
             -- Roll the trait
+            print("[Generals] Rolling #" .. (rollCount + 1) .. "...")
             rollTrait(selectedGeneralUUID)
             rollCount = rollCount + 1
 
