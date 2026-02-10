@@ -19,6 +19,20 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.17",
+        date = "2026-02-10",
+        entries = {
+            { type = "added", text = "Profile selection popup at startup (Unlock/Shake) with separate data files and server configs" },
+            { type = "added", text = "Kill All & Reset button — forcefully kills all Roblox processes and re-acquires mutex" },
+            { type = "added", text = "Stale target cooldown — marks boss locations as stale for 30s if model not found after 15s" },
+            { type = "changed", text = "Parallel instance launching — accounts launch simultaneously with 0.5s stagger (was 5s sequential)" },
+            { type = "changed", text = "Smarter health checks — skips full status check if heartbeat < 10s old" },
+            { type = "changed", text = "Faster window restore — polls every 0.3s instead of 1s for quicker positioning" },
+            { type = "fixed", text = "Boss-only farm not restarting — removed event check (events lag behind actual kills)" },
+            { type = "fixed", text = "Teleporting to non-existent bosses — now verifies client-side model exists after TP" },
+        }
+    },
+    {
         version = "1.0.16",
         date = "2026-02-06",
         entries = {
