@@ -30,6 +30,7 @@ local changelog = {
             { type = "changed", text = "Faster window restore — polls every 0.3s instead of 1s for quicker positioning" },
             { type = "fixed", text = "Boss-only farm not restarting — removed event check (events lag behind actual kills)" },
             { type = "fixed", text = "Teleporting to non-existent bosses — now verifies client-side model exists after TP" },
+            { type = "fixed", text = "Readonly table error in FasterEggOpening — now uses hookfunction with pcall fallback" },
         }
     },
     {
