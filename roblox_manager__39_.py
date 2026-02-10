@@ -396,55 +396,258 @@ def extract_link_code(url_text):
 # ============================================================================
 
 class Theme:
-    # Modern purple dashboard theme
-    sidebar = "#1e1b4b"          # Dark purple sidebar
-    sidebar_hover = "#312e81"     # Sidebar hover
-    sidebar_active = "#4338ca"    # Active sidebar item
+    """Dynamic theme supporting light and dark modes."""
+    _dark_mode = True  # Default to dark mode
 
-    bg = "#f8fafc"               # Light gray main background
-    bg_card = "#ffffff"          # White cards
-    bg_card_hover = "#f1f5f9"    # Card hover
-    bg_input = "#f1f5f9"         # Input background
-
-    primary = "#6366f1"          # Indigo/purple primary
-    primary_hover = "#4f46e5"    # Primary hover
-    primary_dim = "#312e81"      # Darker purple
-
-    accent = "#6366f1"           # Same as primary for consistency
+    # These will be set by apply_mode()
+    sidebar = ""
+    sidebar_hover = ""
+    sidebar_active = ""
+    bg = ""
+    bg_card = ""
+    bg_card_hover = ""
+    bg_input = ""
+    primary = "#6366f1"
+    primary_hover = "#4f46e5"
+    primary_dim = "#312e81"
+    accent = "#6366f1"
     accent_hover = "#4f46e5"
     accent_dim = "#312e81"
-
-    green = "#22c55e"            # Success green
+    green = "#22c55e"
     green_dim = "#166534"
-    green_light = "#dcfce7"      # Light green bg
-
-    red = "#ef4444"              # Error red
+    green_light = ""
+    red = "#ef4444"
     red_dim = "#991b1b"
-    red_light = "#fee2e2"        # Light red bg
-
-    blue = "#3b82f6"             # Info blue
+    red_light = ""
+    blue = "#3b82f6"
     blue_dim = "#1e40af"
-    blue_light = "#dbeafe"       # Light blue bg
-
-    yellow = "#eab308"           # Warning yellow
-    yellow_light = "#fef9c3"     # Light yellow bg
-
-    orange = "#f97316"           # Orange accent
-    orange_light = "#ffedd5"
-
-    text = "#1e293b"             # Dark text
-    text_muted = "#64748b"       # Muted text
-    text_dim = "#94a3b8"         # Dim text
-    text_light = "#ffffff"       # White text (for dark bg)
-
-    border = "#e2e8f0"           # Light border
-    border_dark = "#cbd5e1"      # Darker border
-
-    # Stats card colors
+    blue_light = ""
+    yellow = "#eab308"
+    yellow_light = ""
+    orange = "#f97316"
+    orange_light = ""
+    text = ""
+    text_muted = ""
+    text_dim = ""
+    text_light = "#ffffff"
+    border = ""
+    border_dark = ""
     stat_purple = "#8b5cf6"
     stat_green = "#22c55e"
     stat_orange = "#f97316"
     stat_blue = "#3b82f6"
+    # Title bar
+    titlebar = ""
+    titlebar_text = ""
+
+    @classmethod
+    def apply_mode(cls, dark=True):
+        cls._dark_mode = dark
+        if dark:
+            # Dark mode
+            cls.sidebar = "#1a1625"
+            cls.sidebar_hover = "#2d2640"
+            cls.sidebar_active = "#6366f1"
+            cls.bg = "#0f0d13"
+            cls.bg_card = "#1a1625"
+            cls.bg_card_hover = "#252033"
+            cls.bg_input = "#0f0d13"
+            cls.text = "#e4e4e7"
+            cls.text_muted = "#a1a1aa"
+            cls.text_dim = "#71717a"
+            cls.border = "#2d2640"
+            cls.border_dark = "#3f3655"
+            cls.green_light = "#166534"
+            cls.red_light = "#7f1d1d"
+            cls.blue_light = "#1e3a5f"
+            cls.yellow_light = "#713f12"
+            cls.orange_light = "#7c2d12"
+            cls.titlebar = "#1a1625"
+            cls.titlebar_text = "#e4e4e7"
+        else:
+            # Light mode
+            cls.sidebar = "#1e1b4b"
+            cls.sidebar_hover = "#312e81"
+            cls.sidebar_active = "#4338ca"
+            cls.bg = "#f8fafc"
+            cls.bg_card = "#ffffff"
+            cls.bg_card_hover = "#f1f5f9"
+            cls.bg_input = "#f1f5f9"
+            cls.text = "#1e293b"
+            cls.text_muted = "#64748b"
+            cls.text_dim = "#94a3b8"
+            cls.border = "#e2e8f0"
+            cls.border_dark = "#cbd5e1"
+            cls.green_light = "#dcfce7"
+            cls.red_light = "#fee2e2"
+            cls.blue_light = "#dbeafe"
+            cls.yellow_light = "#fef9c3"
+            cls.orange_light = "#ffedd5"
+            cls.titlebar = "#1e1b4b"
+            cls.titlebar_text = "#ffffff"
+
+    @classmethod
+    def is_dark(cls):
+        return cls._dark_mode
+
+# Apply dark mode by default
+Theme.apply_mode(dark=True)
+
+
+# ============================================================================
+# FLATUI TOGGLE SWITCH
+# ============================================================================
+
+class FlatToggle(tk.Canvas):
+    """A modern flat toggle switch widget."""
+
+    def __init__(self, parent, variable=None, command=None, text="", width=44, height=22,
+                 bg=None, fg=None, on_color=None, off_color=None, **kwargs):
+        self.width = width
+        self.height = height
+        self.bg_color = bg or Theme.bg_card
+        self.fg_color = fg or Theme.text
+        self.on_color = on_color or Theme.accent
+        self.off_color = off_color or Theme.border_dark
+        self.knob_color = "#ffffff"
+        self.text = text
+        self.command = command
+
+        # Calculate total width including text
+        total_width = width + (len(text) * 7 + 12 if text else 0)
+
+        super().__init__(parent, width=total_width, height=height, bg=self.bg_color,
+                        highlightthickness=0, cursor="hand2", **kwargs)
+
+        # Variable binding
+        if variable is None:
+            self._variable = tk.BooleanVar(value=False)
+        else:
+            self._variable = variable
+
+        # Draw elements
+        self._draw()
+
+        # Bindings
+        self.bind("<Button-1>", self._on_click)
+        self._variable.trace_add("write", lambda *args: self._update_visual())
+
+    def _draw(self):
+        """Draw the toggle switch."""
+        self.delete("all")
+
+        h = self.height
+        w = self.width
+        r = h // 2  # radius for rounded ends
+        padding = 3
+        knob_r = r - padding
+
+        is_on = self._variable.get()
+        track_color = self.on_color if is_on else self.off_color
+
+        # Draw track (rounded rectangle)
+        self.create_oval(0, 0, h, h, fill=track_color, outline="")
+        self.create_oval(w - h, 0, w, h, fill=track_color, outline="")
+        self.create_rectangle(r, 0, w - r, h, fill=track_color, outline="")
+
+        # Draw knob
+        knob_x = w - r if is_on else r
+        self.create_oval(knob_x - knob_r, padding, knob_x + knob_r, h - padding,
+                        fill=self.knob_color, outline="")
+
+        # Draw text label
+        if self.text:
+            self.create_text(w + 8, h // 2, text=self.text, anchor="w",
+                           font=("Segoe UI", 9), fill=self.fg_color)
+
+    def _on_click(self, event):
+        """Toggle the state on click."""
+        self._variable.set(not self._variable.get())
+        if self.command:
+            self.command()
+
+    def _update_visual(self):
+        """Redraw when variable changes."""
+        self._draw()
+
+    def get(self):
+        return self._variable.get()
+
+    def set(self, value):
+        self._variable.set(value)
+
+
+class FlatCheckbox(tk.Canvas):
+    """A modern flat checkbox widget with rounded corners."""
+
+    def __init__(self, parent, variable=None, command=None, text="", size=18,
+                 bg=None, fg=None, check_color=None, **kwargs):
+        self.size = size
+        self.bg_color = bg or Theme.bg_card
+        self.fg_color = fg or Theme.text
+        self.check_color = check_color or Theme.accent
+        self.border_color = Theme.border_dark
+        self.text = text
+        self.command = command
+
+        # Calculate total width
+        total_width = size + (len(text) * 7 + 10 if text else 0)
+
+        super().__init__(parent, width=total_width, height=size, bg=self.bg_color,
+                        highlightthickness=0, cursor="hand2", **kwargs)
+
+        if variable is None:
+            self._variable = tk.BooleanVar(value=False)
+        else:
+            self._variable = variable
+
+        self._draw()
+        self.bind("<Button-1>", self._on_click)
+        self._variable.trace_add("write", lambda *args: self._update_visual())
+
+    def _draw(self):
+        """Draw the checkbox."""
+        self.delete("all")
+
+        s = self.size
+        r = 4  # corner radius
+        is_checked = self._variable.get()
+
+        # Box background
+        box_color = self.check_color if is_checked else self.bg_color
+        border = "" if is_checked else self.border_color
+
+        # Draw rounded rectangle
+        self.create_polygon(
+            r, 0, s - r, 0, s, r, s, s - r, s - r, s, r, s, 0, s - r, 0, r,
+            fill=box_color, outline=border, width=1
+        )
+
+        # Draw checkmark if checked
+        if is_checked:
+            # Checkmark path
+            cx, cy = s // 2, s // 2
+            self.create_line(cx - 4, cy, cx - 1, cy + 3, fill="#fff", width=2, capstyle="round")
+            self.create_line(cx - 1, cy + 3, cx + 5, cy - 3, fill="#fff", width=2, capstyle="round")
+
+        # Draw text
+        if self.text:
+            self.create_text(s + 8, s // 2, text=self.text, anchor="w",
+                           font=("Segoe UI", 9), fill=self.fg_color)
+
+    def _on_click(self, event):
+        self._variable.set(not self._variable.get())
+        if self.command:
+            self.command()
+
+    def _update_visual(self):
+        self._draw()
+
+    def get(self):
+        return self._variable.get()
+
+    def set(self, value):
+        self._variable.set(value)
 
 
 # ============================================================================
@@ -2117,6 +2320,9 @@ class RobloxManagerApp:
         # Apply saved settings to UI widgets (checkboxes, dropdowns, etc.)
         self._apply_persisted_settings_to_ui()
 
+        # Start periodic stats refresh (every 2 seconds)
+        self._start_stats_refresh()
+
         self.log("Manager started")
         self.log(f"API server on http://localhost:{PORT}")
 
@@ -2316,6 +2522,17 @@ class RobloxManagerApp:
         # Servers count
         self.stat_cards["servers"].configure(text=str(len(SERVERS)))
 
+    def _start_stats_refresh(self):
+        """Start a periodic timer to refresh stats every 2 seconds."""
+        def refresh_loop():
+            try:
+                self._update_stats()
+            except Exception:
+                pass
+            # Schedule next refresh
+            self.stats_refresh_job = self.root.after(2000, refresh_loop)
+        refresh_loop()
+
     def _card(self, parent):
         return tk.Frame(parent, bg=Theme.bg_card, highlightbackground=Theme.border, highlightthickness=1, padx=12, pady=10)
 
@@ -2419,10 +2636,9 @@ class RobloxManagerApp:
             c.pack(fill="x", pady=(0, 6), padx=(0, 12))
 
             # Checkbox on far left
-            cb = tk.Checkbutton(c, variable=self.acc_selection[name], bg=Theme.bg_card,
-                                activebackground=Theme.bg_card, selectcolor=Theme.bg_input,
-                                command=self._update_sel_count)
-            cb.pack(side="left", padx=(0, 6))
+            cb = FlatCheckbox(c, variable=self.acc_selection[name],
+                              command=self._update_sel_count, bg=Theme.bg_card)
+            cb.pack(side="left", padx=(0, 8))
 
             left = tk.Frame(c, bg=Theme.bg_card)
             left.pack(side="left", fill="x", expand=True)
@@ -2918,10 +3134,8 @@ class RobloxManagerApp:
         pc.pack(fill="x")
 
         self.ps_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(pc, text="  Private Server Only", variable=self.ps_var, font=("Consolas", 10, "bold"),
-                       bg=Theme.bg_card, fg=Theme.text, selectcolor=Theme.bg_input,
-                       activebackground=Theme.bg_card, activeforeground=Theme.accent,
-                       command=self._save_settings).pack(anchor="w")
+        FlatToggle(pc, variable=self.ps_var, text="Private Server Only",
+                   command=self._save_settings, bg=Theme.bg_card).pack(anchor="w", pady=(4, 0))
 
         fr = tk.Frame(pc, bg=Theme.bg_card)
         fr.pack(fill="x", pady=(6, 0))
@@ -2940,10 +3154,8 @@ class RobloxManagerApp:
         arc.pack(fill="x")
 
         self.ar_var = tk.BooleanVar(value=self.settings.get("autoRejoin", False))
-        tk.Checkbutton(arc, text="  Auto Rejoin (Watchdog)", variable=self.ar_var, font=("Consolas", 10, "bold"),
-                       bg=Theme.bg_card, fg=Theme.text, selectcolor=Theme.bg_input,
-                       activebackground=Theme.bg_card, activeforeground=Theme.accent,
-                       command=self._save_settings).pack(anchor="w")
+        FlatToggle(arc, variable=self.ar_var, text="Auto Rejoin (Watchdog)",
+                   command=self._save_settings, bg=Theme.bg_card).pack(anchor="w", pady=(4, 0))
 
         tk.Label(arc, text="\U0001F4A1 Monitors selected accounts and auto-rejoins\n   if their Roblox process goes offline.",
                  font=("Consolas", 8), bg=Theme.bg_card, fg=Theme.text_dim, justify="left").pack(anchor="w", pady=(2, 6))
@@ -2978,11 +3190,8 @@ class RobloxManagerApp:
 
         # Heartbeat requirement toggle
         self.ar_heartbeat_var = tk.BooleanVar(value=self.settings.get("requireHeartbeat", True))
-        tk.Checkbutton(arc, text="  Require Lua heartbeat (uncheck if not running nigMenu)",
-                       variable=self.ar_heartbeat_var, font=("Consolas", 9),
-                       bg=Theme.bg_card, fg=Theme.text_muted, selectcolor=Theme.bg_input,
-                       activebackground=Theme.bg_card, activeforeground=Theme.accent,
-                       command=self._save_settings).pack(anchor="w", pady=(6, 0))
+        FlatToggle(arc, variable=self.ar_heartbeat_var, text="Require Lua heartbeat",
+                   command=self._save_settings, bg=Theme.bg_card).pack(anchor="w", pady=(8, 0))
 
         self.ar_status = tk.Label(arc, text="", font=("Consolas", 9, "bold"), bg=Theme.bg_card, fg=Theme.accent)
         self.ar_status.pack(anchor="w", pady=(8, 0))
@@ -3023,11 +3232,8 @@ class RobloxManagerApp:
         for name in manager.accounts:
             var = tk.BooleanVar(value=(name in self.watchdog_accounts or name in saved_watched))
             self.ar_acc_vars[name] = var
-            tk.Checkbutton(self.ar_acc_frame, text=f"  {name}", variable=var,
-                           font=("Consolas", 9), bg=Theme.bg_card, fg=Theme.text,
-                           selectcolor=Theme.bg_input, activebackground=Theme.bg_card,
-                           activeforeground=Theme.accent,
-                           command=self._save_settings).pack(anchor="w")
+            FlatCheckbox(self.ar_acc_frame, variable=var, text=name,
+                         command=self._save_settings, bg=Theme.bg_card).pack(anchor="w", pady=2)
         if not manager.accounts:
             tk.Label(self.ar_acc_frame, text="  No accounts added yet",
                      font=("Consolas", 8), bg=Theme.bg_card, fg=Theme.text_dim).pack(anchor="w")
