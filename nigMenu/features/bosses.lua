@@ -40,6 +40,7 @@ Bosses.travelTime = 4
 Bosses.currentTarget = nil
 Bosses.status = "Idle"
 Bosses.kills = 0
+Bosses.staleTargets = {}  -- {["world_type"] = expireTime} - tracks stale targets to avoid re-teleporting
 
 -- Boss farm loop restart integration
 Bosses.autoRestartOnKill = true   -- When all targets dead, auto-restart server via manager
@@ -1113,6 +1114,7 @@ function Bosses.startFarmLoop()
 
     Bosses.farmEnabled = true
     Bosses.kills = 0
+    Bosses.staleTargets = {}  -- Clear stale targets on fresh start
 
     Bosses.startHeartbeat()
 
@@ -1190,23 +1192,37 @@ function Bosses.startFarmLoop()
                     Bosses.status = "TP -> W" .. target.world .. " " .. target.type .. " (" .. target.spawn .. ")"
                     log("Teleporting to W" .. target.world .. " " .. target.type)
 
+                    -- Check if this target is on stale cooldown
+                    local staleKey = target.world .. "_" .. target.type
+                    local now = os.time()
+                    if Bosses.staleTargets[staleKey] and Bosses.staleTargets[staleKey] > now then
+                        log("W" .. target.world .. " " .. target.type .. " on stale cooldown, skipping")
+                        task.wait(0.5)
+                        continue
+                    end
+
                     local success = Bosses.teleportAndWait(target.world, target.coords)
                     if success then
-                        task.wait(2)
-
-                        -- Verify boss actually exists locally (client-side model check)
-                        local localTargets = Bosses.buildTargetList()
+                        -- Wait and verify boss exists locally (up to 15 seconds)
                         local foundLocally = false
-                        for _, lt in ipairs(localTargets) do
-                            if lt.world == target.world and lt.type == target.type then
-                                foundLocally = true
-                                break
+                        for attempt = 1, 5 do
+                            task.wait(3)  -- Check every 3 seconds (5 attempts = 15 seconds total)
+                            local localTargets = Bosses.buildTargetList()
+                            for _, lt in ipairs(localTargets) do
+                                if lt.world == target.world and lt.type == target.type then
+                                    foundLocally = true
+                                    break
+                                end
+                            end
+                            if foundLocally then break end
+                            if attempt < 5 then
+                                log("W" .. target.world .. " " .. target.type .. " not found locally, waiting... (" .. attempt .. "/5)")
                             end
                         end
 
                         if not foundLocally then
-                            log("W" .. target.world .. " " .. target.type .. " not found locally (server data stale)")
-                            task.wait(1)
+                            log("W" .. target.world .. " " .. target.type .. " not found after 15s (marking stale for 30s)")
+                            Bosses.staleTargets[staleKey] = now + 30  -- 30 second cooldown
                             -- Continue to next target instead of farming nothing
                         else
                             -- Re-check server part health (may have died while traveling)
@@ -1218,6 +1234,8 @@ function Bosses.startFarmLoop()
                             end)
                             if health > 0 then
                                 farmTarget(target)
+                                -- Clear stale status if we successfully farmed
+                                Bosses.staleTargets[staleKey] = nil
                             else
                                 log("W" .. target.world .. " " .. target.type .. " died before arrival")
                             end
