@@ -79,13 +79,13 @@ Config.Constants = {
     
     -- Accessory systems (all use "ItemSystem" > "Buy" with typeName)
     -- rouletteId: The ID used in SpinRoulette.CreateByServer events
-    -- rollCount: How many options to roll (Quirk is 1, others are 5)
+    -- rollCount: How many options to roll (all use 5)
     ACCESSORY_SYSTEMS = {
         { name = 'Eye',   typeName = 'Eyes',   rouletteId = 'Eyes',   target = 'Omniscient Eye',    rollCount = 5, icon = '👁️', color = Color3.fromRGB(255, 100, 100) },
         { name = 'Fruit', typeName = 'Fruits', rouletteId = 'Fruits', target = 'Singularity Fruit', rollCount = 5, icon = '🍎', color = Color3.fromRGB(100, 255, 100) },
         { name = 'Curse', typeName = 'Curses', rouletteId = 'Curses', target = 'Mythical',          rollCount = 5, icon = '💀', color = Color3.fromRGB(180, 80, 180) },
         { name = 'Gene',  typeName = 'Genes',  rouletteId = 'Genes',  target = 'Progenitor Gene',   rollCount = 5, icon = '🧬', color = Color3.fromRGB(255, 200, 100) },
-        { name = 'Quirk', typeName = 'Quirks', rouletteId = 'Quirk',  target = 'Ascendant Quirk',   rollCount = 1, icon = '⚡', color = Color3.fromRGB(100, 150, 255) }
+        { name = 'Quirk', typeName = 'Quirks', rouletteId = 'Quirks', target = 'Ascendant Quirk',   rollCount = 5, icon = '⚡', color = Color3.fromRGB(100, 150, 255) }
     },
     
     -- Prestige levels for pet merging
