@@ -19,6 +19,13 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.20",
+        date = "2026-02-10",
+        entries = {
+            { type = "fixed", text = "Parallel launch still double-launching — increased stagger to 3s, added pre-launch running check" },
+        }
+    },
+    {
         version = "1.0.19",
         date = "2026-02-10",
         entries = {

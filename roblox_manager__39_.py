@@ -3044,21 +3044,27 @@ class RobloxManagerApp:
                     except Exception as ex:
                         self.root.after(0, lambda e=str(ex): self.log(f"Watchdog error: {e}", "error"))
 
-                # Relaunch all offline accounts IN PARALLEL
+                # Relaunch all offline accounts IN PARALLEL (with stagger)
                 if accounts_to_relaunch:
                     def relaunch_one(acc_name):
                         try:
+                            # Double-check account isn't already running before launching
+                            running, pid, _ = manager.get_instance_status(acc_name, require_heartbeat=False)
+                            if running and pid:
+                                self.root.after(0, lambda a=acc_name, p=pid: self.log(
+                                    f"⚠️ {a} already running (PID {p}), skipping relaunch"))
+                                return
                             self._watchdog_rejoin(acc_name, srv)
                         finally:
                             # Remove from launching set when done (success or failure)
                             currently_launching.discard(acc_name)
 
-                    # Launch all accounts simultaneously in separate threads
+                    # Launch accounts with 3 second stagger to prevent race conditions
                     for acc_name in accounts_to_relaunch:
                         currently_launching.add(acc_name)  # Mark as launching
                         t = threading.Thread(target=relaunch_one, args=(acc_name,), daemon=True)
                         t.start()
-                        time.sleep(0.5)  # Tiny stagger to avoid overwhelming mutex handling
+                        time.sleep(3)  # 3 second stagger between launches
 
                 self.auto_restart_job = self.root.after(interval_s * 1000, check)
             self.auto_restart_job = self.root.after(interval_s * 1000, check)
