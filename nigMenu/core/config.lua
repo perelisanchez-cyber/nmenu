@@ -49,7 +49,7 @@ end)
 Config.Constants = {
     AUTO_LEAVE_WAVE = 501,
     ENABLE_AUTO_LEAVE = true,
-    VERSION = "1.0.26",
+    VERSION = "1.0.27",
     
     -- Potion names
     POTIONS = {
@@ -78,11 +78,14 @@ Config.Constants = {
     },
     
     -- Accessory systems (all use "ItemSystem" > "Buy" with typeName)
+    -- rouletteId: The ID used in SpinRoulette.CreateByServer events
+    -- rollCount: How many options to roll (Quirk is 1, others are 5)
     ACCESSORY_SYSTEMS = {
-        { name = 'Eye',   typeName = 'Eyes',   target = 'Omniscient Eye',   icon = '👁️', color = Color3.fromRGB(255, 100, 100) },
-        { name = 'Fruit', typeName = 'Fruits', target = 'Singularity Fruit', icon = '🍎', color = Color3.fromRGB(100, 255, 100) },
-        { name = 'Quirk', typeName = 'Quirks', target = 'Ascendant Quirk',   icon = '⚡', color = Color3.fromRGB(100, 150, 255) },
-        { name = 'Gene',  typeName = 'Genes',  target = 'Progenitor Gene',   icon = '🧬', color = Color3.fromRGB(255, 200, 100) }
+        { name = 'Eye',   typeName = 'Eyes',   rouletteId = 'Eyes',   target = 'Omniscient Eye',    rollCount = 5, icon = '👁️', color = Color3.fromRGB(255, 100, 100) },
+        { name = 'Fruit', typeName = 'Fruits', rouletteId = 'Fruits', target = 'Singularity Fruit', rollCount = 5, icon = '🍎', color = Color3.fromRGB(100, 255, 100) },
+        { name = 'Curse', typeName = 'Curses', rouletteId = 'Curses', target = 'Mythical',          rollCount = 5, icon = '💀', color = Color3.fromRGB(180, 80, 180) },
+        { name = 'Gene',  typeName = 'Genes',  rouletteId = 'Genes',  target = 'Progenitor Gene',   rollCount = 5, icon = '🧬', color = Color3.fromRGB(255, 200, 100) },
+        { name = 'Quirk', typeName = 'Quirks', rouletteId = 'Quirk',  target = 'Ascendant Quirk',   rollCount = 1, icon = '⚡', color = Color3.fromRGB(100, 150, 255) }
     },
     
     -- Prestige levels for pet merging

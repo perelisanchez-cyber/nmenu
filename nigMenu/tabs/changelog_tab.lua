@@ -19,6 +19,16 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.27",
+        date = "2026-02-10",
+        entries = {
+            { type = "added", text = "Roulette-based item rerollers — Eyes, Fruits, Genes, Quirks now roll multiple options and pick best" },
+            { type = "added", text = "Curses reroller added to Items tab" },
+            { type = "changed", text = "Items tab completely rewritten to use roulette system (roll 5, pick best rarity)" },
+            { type = "changed", text = "Each item type shows roll count, elapsed time, and current status" },
+        }
+    },
+    {
         version = "1.0.26",
         date = "2026-02-10",
         entries = {
