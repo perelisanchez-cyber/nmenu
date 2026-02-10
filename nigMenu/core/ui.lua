@@ -515,6 +515,7 @@ function UI.createMainWindow()
     local tabData = {
         { 'Auto',     '⚡' },
         { 'Upgrades', '⚔' },
+        { 'Generals', '🎲' },
         { 'Items',    '🎒' },
         { 'Merger',   '⭐' },
         { 'Bosses',   '💀' },

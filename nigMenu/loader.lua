@@ -254,10 +254,10 @@ NM.Tabs = {}
 local tabModules = {
     { file = "auto_tab.lua", name = "Auto" },
     { file = "upgrades_tab.lua", name = "Upgrades" },
+    { file = "generals_tab.lua", name = "Generals" },
     { file = "items_tab.lua", name = "Items" },
     { file = "merger_tab.lua", name = "Merger" },
     { file = "bosses_tab.lua", name = "Bosses" },
-    { file = "server_tab.lua", name = "ServerHopper" },
     { file = "utils_tab.lua", name = "Utils" },
     { file = "config_tab.lua", name = "Config" },
     { file = "changelog_tab.lua", name = "Changelog" }

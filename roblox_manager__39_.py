@@ -1844,7 +1844,7 @@ class AccountManager:
         # Process alive, no heartbeat, been a while since launch = stuck/disconnected
         return False, pid, srv
 
-    def cleanup_orphan_processes(self):
+    def cleanup_orphan_processes(self, require_heartbeat=True):
         """Kill any RobloxPlayerBeta processes that aren't tracked by a healthy instance.
 
         This prevents zombie Roblox windows from piling up when:
@@ -1852,16 +1852,20 @@ class AccountManager:
         - Game got stuck on loading screen (no heartbeat ever sent)
         - Process survived a restart/rejoin cycle
 
+        Args:
+            require_heartbeat: If True, only processes with recent heartbeats are considered healthy.
+                               If False, any running tracked process is considered healthy.
+
         Returns: number of orphan processes killed
         """
-        # Collect PIDs that are tracked AND have recent heartbeat or are in grace period
+        # Collect PIDs that are tracked AND are considered healthy
         healthy_pids = set()
         for acc_name, inst in self.instances.items():
             pid = inst.get("pid", 0)
             if not pid:
                 continue
             # Check if this instance is considered "running" (healthy)
-            running, _, _ = self.get_instance_status(acc_name, require_heartbeat=True)
+            running, _, _ = self.get_instance_status(acc_name, require_heartbeat=require_heartbeat)
             if running:
                 healthy_pids.add(pid)
 
@@ -3352,7 +3356,7 @@ class RobloxManagerApp:
                 # Periodic orphan cleanup: kill zombie Roblox processes not tracked by healthy instances
                 if check_count[0] % 3 == 0:
                     try:
-                        orphans_killed = manager.cleanup_orphan_processes()
+                        orphans_killed = manager.cleanup_orphan_processes(require_heartbeat=require_heartbeat)
                         if orphans_killed:
                             self.root.after(0, lambda k=orphans_killed: self.log(
                                 f"\U0001F9F9 Orphan cleanup: killed {k} zombie process(es)", "warn"))
