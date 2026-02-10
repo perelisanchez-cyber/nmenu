@@ -94,15 +94,20 @@ local function getCurrentTrait(uuid)
 end
 
 local function rollTrait(uuid)
+    local payload = {
+        generalId = uuid,
+        count = 1
+    }
+
     local Bridge = getBridge()
     if Bridge then
-        Bridge:FireServer("Traits", "RollGeneralTrait", uuid)
+        Bridge:FireServer("Traits", "RollGeneralTrait", payload)
     else
         -- Fallback: directly access ReplicatedStorage.Bridge
         local RS = game:GetService("ReplicatedStorage")
         local directBridge = RS:FindFirstChild("Bridge")
         if directBridge then
-            directBridge:FireServer("Traits", "RollGeneralTrait", uuid)
+            directBridge:FireServer("Traits", "RollGeneralTrait", payload)
         else
             warn("[Generals] Bridge not found! Cannot roll traits.")
         end

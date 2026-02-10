@@ -19,6 +19,13 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.23",
+        date = "2026-02-10",
+        entries = {
+            { type = "fixed", text = "Trait roller now uses correct payload format — passes {generalId, count} table to FireServer" },
+        }
+    },
+    {
         version = "1.0.22",
         date = "2026-02-10",
         entries = {
