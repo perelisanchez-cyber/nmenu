@@ -40,6 +40,9 @@ local ROLL_DELAY = 1.5
 local PICK_DELAY = 0.5
 local RESULT_TIMEOUT = 10
 
+-- Rarity priority (higher = better)
+local RARITY_PRIORITY = { D = 1, C = 2, B = 3, A = 4, S = 5, SS = 6 }
+
 -- UI Labels
 local statusLabel = nil
 local rollsLabel = nil
@@ -374,21 +377,33 @@ local function startRolling()
                 continue
             end
 
-            -- Check all options for target rarity
+            -- Check all options for target rarity and track best available
+            local targetSlot = nil
+            local targetRarityFound = nil
             local bestSlot = nil
             local bestRarity = nil
+            local bestPriority = 0
 
             print("[Generals] Checking", #pendingRewards, "options:")
 
             for idx, traitId in ipairs(pendingRewards) do
                 local name, rarity, desc = decodeTrait(traitId)
                 local rarityPrefix = getRarityFromId(traitId)
+                local priority = RARITY_PRIORITY[rarityPrefix] or 0
 
                 -- Track stats
                 if rarityCount[rarityPrefix] then
                     rarityCount[rarityPrefix] = rarityCount[rarityPrefix] + 1
                 end
 
+                -- Track best available option
+                if priority > bestPriority then
+                    bestSlot = idx
+                    bestRarity = rarityPrefix
+                    bestPriority = priority
+                end
+
+                -- Check if this is our target
                 local isTarget = false
                 if targetRarity == "SS" and rarityPrefix == "SS" then
                     isTarget = true
@@ -397,13 +412,13 @@ local function startRolling()
                 end
 
                 if isTarget then
-                    -- Prefer SS over S
-                    if not bestSlot then
-                        bestSlot = idx
-                        bestRarity = rarityPrefix
-                    elseif rarityPrefix == "SS" and bestRarity ~= "SS" then
-                        bestSlot = idx
-                        bestRarity = rarityPrefix
+                    -- Prefer SS over S for target
+                    if not targetSlot then
+                        targetSlot = idx
+                        targetRarityFound = rarityPrefix
+                    elseif rarityPrefix == "SS" and targetRarityFound ~= "SS" then
+                        targetSlot = idx
+                        targetRarityFound = rarityPrefix
                     end
                     print(string.format("  [%d] %s [%s] <<< TARGET", idx, name, rarity))
                 else
@@ -411,17 +426,17 @@ local function startRolling()
                 end
             end
 
-            if bestSlot then
-                -- Found target - pick it!
-                local name, rarity, _ = decodeTrait(pendingRewards[bestSlot])
-                print("[Generals] PICKING SLOT", bestSlot, ":", name, "[" .. rarity .. "]")
+            if targetSlot then
+                -- Found target - pick it and stop!
+                local name, rarity, _ = decodeTrait(pendingRewards[targetSlot])
+                print("[Generals] PICKING SLOT", targetSlot, ":", name, "[" .. rarity .. "]")
 
                 task.wait(PICK_DELAY)
-                doPick(currentRouletteId, bestSlot)
+                doPick(currentRouletteId, targetSlot)
 
                 local elapsed = tick() - startTime
                 print("=====================================")
-                print("SUCCESS! GOT " .. bestRarity .. " TIER!")
+                print("SUCCESS! GOT " .. targetRarityFound .. " TIER!")
                 print("=====================================")
                 print("Trait:", name)
                 print("Rarity:", rarity)
@@ -431,7 +446,7 @@ local function startRolling()
 
                 -- Update status
                 if statusLabel and statusLabel.Parent then
-                    statusLabel.Text = "FOUND " .. bestRarity .. "!"
+                    statusLabel.Text = "FOUND " .. targetRarityFound .. "!"
                     statusLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
                 end
 
@@ -439,10 +454,10 @@ local function startRolling()
                 updateUI()
                 return
             else
-                -- No target found - pick slot 1 and continue
-                print("[Generals] No S/SS found, picking slot 1 and continuing...")
+                -- No target found - pick best available and continue
+                print("[Generals] No S/SS found, picking best option (slot " .. bestSlot .. ", " .. bestRarity .. ") and continuing...")
                 task.wait(PICK_DELAY)
-                doPick(currentRouletteId, 1)
+                doPick(currentRouletteId, bestSlot)
                 task.wait(ROLL_DELAY)
             end
 

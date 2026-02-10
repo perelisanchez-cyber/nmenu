@@ -1477,41 +1477,41 @@ class AccountManager:
 
                 # Phase 1: Wait for game to load + Lua to inject + boss loop to start
                 # Heartbeat should arrive ~35-40s after launch
-                time.sleep(30)
+                time.sleep(45)
 
                 inst = self.instances.get(account_name)
                 if not inst:
                     return  # Instance was cleared (already handled)
 
-                # Phase 2: Check every 2 seconds for 20 seconds (10 checks)
-                # If 3 consecutive checks fail, kill and restart
-                # Freshness window is 60s to catch any heartbeat since launch
+                # Phase 2: Check every 3 seconds for 30 seconds (10 checks)
+                # If 5 consecutive checks fail, kill and restart
+                # Freshness window is 90s to catch any heartbeat since launch
                 consecutive_failures = 0
                 for check_num in range(10):
-                    time.sleep(2)
+                    time.sleep(3)
 
                     inst = self.instances.get(account_name)
                     if not inst:
                         return  # Instance was cleared
 
                     report = self.player_reports.get(roblox_username)
-                    if report and (time.time() - report["timestamp"]) < 60:
+                    if report and (time.time() - report["timestamp"]) < 90:
                         # Got a heartbeat — we're good, exit health check
                         print(f"[HEALTH] {account_name}: heartbeat OK, fully loaded")
                         return
                     else:
                         consecutive_failures += 1
-                        print(f"[HEALTH] {account_name}: no heartbeat (strike {consecutive_failures}/3, check {check_num + 1}/10)")
+                        print(f"[HEALTH] {account_name}: no heartbeat (strike {consecutive_failures}/5, check {check_num + 1}/10)")
 
-                        if consecutive_failures >= 3:
-                            # 3 strikes — kill and restart
+                        if consecutive_failures >= 5:
+                            # 5 strikes — kill and restart
                             pid = inst.get("pid", 0)
                             if pid:
                                 try:
                                     p = psutil.Process(pid)
                                     if p.is_running():
                                         p.kill()
-                                        print(f"[HEALTH] {account_name}: killed hung process PID {pid} (3 consecutive heartbeat failures)")
+                                        print(f"[HEALTH] {account_name}: killed hung process PID {pid} (5 consecutive heartbeat failures)")
                                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                                     pass
                             self.instances.pop(account_name, None)
@@ -1529,7 +1529,7 @@ class AccountManager:
                                 print(f"[HEALTH] {account_name}: restart failed: {restart_result.get('error')}")
                             return
 
-                # If we got here without a heartbeat after 50s total (30 + 20), kill the process
+                # If we got here without a heartbeat after 75s total (45 + 30), kill the process
                 inst = self.instances.get(account_name)
                 if not inst:
                     return
@@ -1540,7 +1540,7 @@ class AccountManager:
                         p = psutil.Process(pid)
                         if p.is_running():
                             p.kill()
-                            print(f"[HEALTH] {account_name}: killed hung process PID {pid} (no heartbeat after 50s)")
+                            print(f"[HEALTH] {account_name}: killed hung process PID {pid} (no heartbeat after 75s)")
                             self.instances.pop(account_name, None)
                             if roblox_username and roblox_username in self.player_reports:
                                 del self.player_reports[roblox_username]

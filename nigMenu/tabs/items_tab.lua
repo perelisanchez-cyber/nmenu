@@ -35,8 +35,12 @@ local RARITY_PRIORITY = {
     Rare = 3,
     Epic = 4,
     Legendary = 5,
-    Mythical = 6
+    Mythical = 6,
+    SSS = 7
 }
+
+-- Target rarity options for each item type
+local TARGET_RARITIES = {"Legendary", "Mythical", "SSS"}
 
 -- ============================================================================
 -- HELPERS
@@ -242,8 +246,11 @@ local function startRolling(accName, accConfig)
     -- Setup bridge listener
     setupBridgeListener()
 
+    local targetRarity = state.targetRarity or "Mythical"
+    local targetPriority = RARITY_PRIORITY[targetRarity] or 6
+
     print("[Items] Starting " .. accName .. " roller")
-    print("[Items] Target:", accConfig.target)
+    print("[Items] Target rarity:", targetRarity)
     print("[Items] Rolling", accConfig.rollCount or 5, "options per roll")
 
     state.isRolling = true
@@ -289,103 +296,83 @@ local function startRolling(accName, accConfig)
                 continue
             end
 
-            -- Analyze all options and find best one
+            -- Analyze all options - find target and track best available
+            local targetSlot = nil
+            local targetRarityFound = nil
             local bestSlot = nil
             local bestRarity = nil
             local bestPriority = 0
 
-            print("[Items] Checking", #state.pendingRewards, "options:")
+            print("[Items] Checking", #state.pendingRewards, "options (target: " .. targetRarity .. "+):")
 
             for idx, itemName in ipairs(state.pendingRewards) do
                 local rarity = getItemRarity(itemName, accName) or "Common"
                 local priority = RARITY_PRIORITY[rarity] or 0
 
-                print(string.format("  [%d] %s [%s]", idx, itemName, rarity))
-
-                -- Check if this is the target or better
-                local isTarget = false
-                if type(accConfig.target) == "string" then
-                    -- Check if item name matches target or rarity matches target
-                    if itemName == accConfig.target or rarity == accConfig.target then
-                        isTarget = true
-                    end
-                end
-
-                -- Track best option
+                -- Track best available option
                 if priority > bestPriority then
                     bestSlot = idx
                     bestRarity = rarity
                     bestPriority = priority
                 end
 
+                -- Check if this meets or exceeds target rarity
+                local isTarget = priority >= targetPriority
+
                 if isTarget then
-                    bestSlot = idx
-                    bestRarity = rarity
-                    print(string.format("  [%d] %s [%s] <<< TARGET FOUND!", idx, itemName, rarity))
-                    break
+                    -- Prefer higher rarity among targets
+                    if not targetSlot or priority > (RARITY_PRIORITY[targetRarityFound] or 0) then
+                        targetSlot = idx
+                        targetRarityFound = rarity
+                    end
+                    print(string.format("  [%d] %s [%s] <<< TARGET", idx, itemName, rarity))
+                else
+                    print(string.format("  [%d] %s [%s]", idx, itemName, rarity))
                 end
             end
 
             -- Check if we found target
-            local foundTarget = false
-            if bestSlot then
-                local itemName = state.pendingRewards[bestSlot]
-                local rarity = getItemRarity(itemName, accName) or "Common"
+            if targetSlot then
+                local itemName = state.pendingRewards[targetSlot]
 
-                -- Check if we hit target
-                if type(accConfig.target) == "string" then
-                    if itemName == accConfig.target or rarity == accConfig.target then
-                        foundTarget = true
-                    end
-                end
-
-                if foundTarget then
-                    print("[Items] PICKING SLOT", bestSlot, ":", itemName, "[" .. rarity .. "]")
-
-                    task.wait(PICK_DELAY)
-                    doPick(state.currentRouletteId, bestSlot)
-
-                    local elapsed = tick() - state.startTime
-                    print("=====================================")
-                    print("SUCCESS! GOT TARGET: " .. itemName)
-                    print("=====================================")
-                    print("Rarity:", rarity)
-                    print("Total Rolls:", state.rollCount)
-                    print("Time:", formatTime(elapsed))
-                    print("=====================================")
-
-                    -- Update status
-                    if state.statusLabel and state.statusLabel.Parent then
-                        state.statusLabel.Text = "GOT IT!"
-                        state.statusLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
-                    end
-
-                    state.isRolling = false
-
-                    -- Save toggle state
-                    if Config.Toggles.accessoryRollLoops then
-                        Config.Toggles.accessoryRollLoops[accName] = false
-                    end
-
-                    local NM = getNM()
-                    if NM and NM.Settings then
-                        NM.Settings.save()
-                    end
-
-                    updateItemUI(accName)
-                    return
-                else
-                    -- Pick best available and continue
-                    print("[Items] No target found, picking best option (slot " .. bestSlot .. ") and continuing...")
-                    task.wait(PICK_DELAY)
-                    doPick(state.currentRouletteId, bestSlot)
-                    task.wait(ROLL_DELAY)
-                end
-            else
-                -- Fallback: pick slot 1
-                print("[Items] No valid rewards, picking slot 1...")
                 task.wait(PICK_DELAY)
-                doPick(state.currentRouletteId, 1)
+                doPick(state.currentRouletteId, targetSlot)
+
+                local elapsed = tick() - state.startTime
+                print("=====================================")
+                print("SUCCESS! GOT " .. targetRarityFound .. "!")
+                print("=====================================")
+                print("Item:", itemName)
+                print("Rarity:", targetRarityFound)
+                print("Total Rolls:", state.rollCount)
+                print("Time:", formatTime(elapsed))
+                print("=====================================")
+
+                -- Update status
+                if state.statusLabel and state.statusLabel.Parent then
+                    state.statusLabel.Text = "GOT " .. targetRarityFound .. "!"
+                    state.statusLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+                end
+
+                state.isRolling = false
+
+                -- Save toggle state
+                if Config.Toggles.accessoryRollLoops then
+                    Config.Toggles.accessoryRollLoops[accName] = false
+                end
+
+                local NM = getNM()
+                if NM and NM.Settings then
+                    NM.Settings.save()
+                end
+
+                updateItemUI(accName)
+                return
+            else
+                -- No target found - pick best available and continue
+                print("[Items] No target found, picking best option (slot " .. bestSlot .. ", " .. bestRarity .. ") and continuing...")
+                task.wait(PICK_DELAY)
+                doPick(state.currentRouletteId, bestSlot)
                 task.wait(ROLL_DELAY)
             end
 
@@ -434,17 +421,19 @@ function ItemsTab.init()
             currentRouletteId = nil,
             waitingForResult = false,
             color = acc.color,
+            targetRarity = "Mythical",  -- Default target
             -- UI refs
             statusLabel = nil,
             rollsLabel = nil,
             timeLabel = nil,
-            rollBtn = nil
+            rollBtn = nil,
+            targetBtns = {}
         }
 
         local state = itemStates[accName]
 
-        -- Create card
-        local card = Utils.createCard(panel, nil, 110, yOffset)
+        -- Create card (taller to fit target buttons)
+        local card = Utils.createCard(panel, nil, 130, yOffset)
 
         -- Icon
         Utils.createIcon(card, acc.icon, acc.color, 50, UDim2.new(0, 12, 0, 30))
@@ -452,7 +441,7 @@ function ItemsTab.init()
         -- Title
         Utils.create('TextLabel', {
             Size = UDim2.new(0, 100, 0, 20),
-            Position = UDim2.new(0, 72, 0, 10),
+            Position = UDim2.new(0, 72, 0, 8),
             BackgroundTransparency = 1,
             Text = acc.name:upper(),
             TextColor3 = acc.color,
@@ -465,7 +454,7 @@ function ItemsTab.init()
         -- Current/Status label
         state.statusLabel = Utils.create('TextLabel', {
             Size = UDim2.new(0, 150, 0, 16),
-            Position = UDim2.new(0, 72, 0, 30),
+            Position = UDim2.new(0, 72, 0, 26),
             BackgroundTransparency = 1,
             Text = 'Loading...',
             TextColor3 = T.TextDim,
@@ -475,10 +464,10 @@ function ItemsTab.init()
             Parent = card
         })
 
-        -- Target label
+        -- Target rarity row
         Utils.create('TextLabel', {
             Size = UDim2.new(0, 50, 0, 14),
-            Position = UDim2.new(0, 72, 0, 48),
+            Position = UDim2.new(0, 72, 0, 46),
             BackgroundTransparency = 1,
             Text = 'Target:',
             TextColor3 = T.TextMuted,
@@ -488,22 +477,46 @@ function ItemsTab.init()
             Parent = card
         })
 
-        Utils.create('TextLabel', {
-            Size = UDim2.new(0, 140, 0, 14),
-            Position = UDim2.new(0, 115, 0, 48),
-            BackgroundTransparency = 1,
-            Text = acc.target,
-            TextColor3 = T.Success,
-            TextSize = 11,
-            Font = Enum.Font.GothamMedium,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            Parent = card
-        })
+        -- Target rarity buttons (Legendary / Mythical / SSS)
+        local targetBtnX = 115
+        for i, rarity in ipairs(TARGET_RARITIES) do
+            local isSelected = (rarity == state.targetRarity)
+            local btnWidth = (rarity == "Legendary") and 60 or 45
+
+            local btn = Utils.create('TextButton', {
+                Size = UDim2.new(0, btnWidth, 0, 18),
+                Position = UDim2.new(0, targetBtnX, 0, 44),
+                BackgroundColor3 = isSelected and Color3.fromRGB(60, 160, 60) or T.CardHover,
+                BorderSizePixel = 0,
+                Text = rarity,
+                TextColor3 = getRarityColor(rarity),
+                TextSize = 10,
+                Font = Enum.Font.GothamBold,
+                Parent = card
+            })
+            Utils.addCorner(btn, 4)
+
+            state.targetBtns[rarity] = btn
+
+            btn.MouseButton1Click:Connect(function()
+                state.targetRarity = rarity
+                -- Update all button visuals
+                for r, b in pairs(state.targetBtns) do
+                    if r == rarity then
+                        b.BackgroundColor3 = Color3.fromRGB(60, 160, 60)
+                    else
+                        b.BackgroundColor3 = T.CardHover
+                    end
+                end
+            end)
+
+            targetBtnX = targetBtnX + btnWidth + 4
+        end
 
         -- Stats row
         state.rollsLabel = Utils.create('TextLabel', {
             Size = UDim2.new(0, 70, 0, 14),
-            Position = UDim2.new(0, 72, 0, 66),
+            Position = UDim2.new(0, 72, 0, 68),
             BackgroundTransparency = 1,
             Text = 'Rolls: 0',
             TextColor3 = T.TextMuted,
@@ -515,7 +528,7 @@ function ItemsTab.init()
 
         state.timeLabel = Utils.create('TextLabel', {
             Size = UDim2.new(0, 60, 0, 14),
-            Position = UDim2.new(0, 145, 0, 66),
+            Position = UDim2.new(0, 145, 0, 68),
             BackgroundTransparency = 1,
             Text = '0:00',
             TextColor3 = T.TextMuted,
@@ -525,14 +538,14 @@ function ItemsTab.init()
             Parent = card
         })
 
-        -- Roll count indicator
+        -- Roll count indicator (shows how many options per roll)
         Utils.create('TextLabel', {
-            Size = UDim2.new(0, 40, 0, 14),
-            Position = UDim2.new(0, 72, 0, 84),
+            Size = UDim2.new(0, 80, 0, 14),
+            Position = UDim2.new(0, 72, 0, 86),
             BackgroundTransparency = 1,
-            Text = 'x' .. (acc.rollCount or 5),
+            Text = 'x' .. (acc.rollCount or 5) .. ' per roll',
             TextColor3 = T.TextMuted,
-            TextSize = 10,
+            TextSize = 9,
             Font = Enum.Font.Gotham,
             TextXAlignment = Enum.TextXAlignment.Left,
             Parent = card
@@ -540,8 +553,8 @@ function ItemsTab.init()
 
         -- Roll button
         state.rollBtn = Utils.create('TextButton', {
-            Size = UDim2.new(0, 70, 0, 50),
-            Position = UDim2.new(1, -80, 0.5, -25),
+            Size = UDim2.new(0, 70, 0, 60),
+            Position = UDim2.new(1, -80, 0.5, -30),
             BackgroundColor3 = acc.color,
             BorderSizePixel = 0,
             Text = 'ROLL',
@@ -562,7 +575,7 @@ function ItemsTab.init()
             end
         end)
 
-        yOffset = yOffset + 118
+        yOffset = yOffset + 138
     end
 
     -- Info card
@@ -572,7 +585,7 @@ function ItemsTab.init()
         Size = UDim2.new(1, -20, 0, 40),
         Position = UDim2.new(0, 12, 0, 6),
         BackgroundTransparency = 1,
-        Text = 'Rolls multiple options per attempt and picks best rarity.\nAutomatically stops when target is found.',
+        Text = 'Select target rarity (Legendary/Mythical/SSS), then click ROLL.\nRolls 5 options per attempt and picks target or better.',
         TextColor3 = T.TextMuted,
         TextSize = 10,
         Font = Enum.Font.Gotham,
