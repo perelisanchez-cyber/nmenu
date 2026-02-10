@@ -972,10 +972,41 @@ end
 -- DEBUG: VIEW ALL BOSS SPAWN TIMES
 -- ============================================================================
 
+-- Timezone offset: Server uses UTC+3 (Moscow time)
+local TIMEZONE_OFFSET = 10800 -- 3 hours in seconds
+
+-- Calculate next spawn and despawn times for a boss config
+local function getNextSpawn(config)
+    local now = workspace:GetServerTimeNow()
+    local anchor = config.startTime.hour * 3600 + config.startTime.min * 60 + TIMEZONE_OFFSET
+    local cd = config.cooldown
+    local dur = config.duration
+    local n = math.floor((now - anchor) / cd)
+    local spawnTime = anchor + n * cd
+    -- If we're past the despawn time, advance to next cycle
+    if now > spawnTime + dur then
+        spawnTime = spawnTime + cd
+    end
+    return spawnTime, spawnTime + dur
+end
+
+-- Format time nicely
+local function formatTimeRemaining(seconds)
+    if seconds <= 0 then return "NOW" end
+    local h = math.floor(seconds / 3600)
+    local m = math.floor((seconds % 3600) / 60)
+    local s = math.floor(seconds % 60)
+    if h > 0 then
+        return string.format("%dh %02dm %02ds", h, m, s)
+    else
+        return string.format("%dm %02ds", m, s)
+    end
+end
+
 function Bosses.debugBossSpawnTimes()
     --[[
-        Scan ALL bosses in server folder (including not-yet-spawned ones).
-        Display spawn times ordered by time remaining.
+        Calculate ALL boss spawn times using WorldBossData.BossConfigs.
+        Uses the correct formula with UTC+3 timezone offset.
         Opens console and shows formatted output.
     ]]
     local NM = getNM()
@@ -986,106 +1017,85 @@ function Bosses.debugBossSpawnTimes()
 
     if con then con.clear(); con.show() end
 
-    local serverFolder = getServerBossFolder()
-    if not serverFolder then
-        log("ERROR: Cannot find workspace.Server.Enemies.WorldBoss")
+    -- Load WorldBossData
+    local WorldBossData
+    pcall(function()
+        WorldBossData = require(game:GetService("ReplicatedStorage").SharedModules.WorldBossData)
+    end)
+
+    if not WorldBossData or not WorldBossData.BossConfigs then
+        log("ERROR: Cannot load WorldBossData.BossConfigs")
         return
     end
 
-    local now = nil
-    pcall(function() now = workspace:GetServerTimeNow() end)
-    if not now then now = os.time() end
+    local now = workspace:GetServerTimeNow()
 
     log("====== BOSS SPAWN TIMES ======")
     log("Server Time: " .. string.format("%.1f", now))
+    log("Timezone: UTC+3 (offset: " .. TIMEZONE_OFFSET .. "s)")
     log("")
 
     local allBosses = {}
 
-    pcall(function()
-        for _, mapFolder in ipairs(serverFolder:GetChildren()) do
-            local data = spawnToData[mapFolder.Name]
-            if not data then continue end
+    for name, config in pairs(WorldBossData.BossConfigs) do
+        local spawnTime, despawnTime = getNextSpawn(config)
+        local timeUntilSpawn = spawnTime - now
+        local timeUntilDespawn = despawnTime - now
+        local active = timeUntilSpawn <= 0 and timeUntilDespawn > 0
+        local isAngel = name:find("BossAngel") ~= nil
+        local displayName = isAngel and name:gsub("BossAngel_", "Angel ") or name
 
-            for _, part in ipairs(mapFolder:GetChildren()) do
-                if not part:IsA("BasePart") then continue end
+        table.insert(allBosses, {
+            name = name,
+            displayName = displayName,
+            map = config.MapId or "?",
+            isAngel = isAngel,
+            active = active,
+            spawnTime = spawnTime,
+            despawnTime = despawnTime,
+            timeUntilSpawn = timeUntilSpawn,
+            timeUntilDespawn = timeUntilDespawn,
+            cooldown = config.cooldown,
+            duration = config.duration,
+        })
+    end
 
-                local health = part:GetAttribute("Health") or 0
-                local maxHealth = part:GetAttribute("MaxHealth") or 0
-                local died = part:GetAttribute("Died") or false
-                local spawnTime = part:GetAttribute("spawnTime") or 0
-                local despawnTime = part:GetAttribute("despawnTime") or 0
-                local isAngel = part.Name:find("BossAngel") ~= nil
-
-                local timeUntilSpawn = spawnTime - now
-                local timeUntilDespawn = despawnTime - now
-
-                local status = "?"
-                if died or health <= 0 then
-                    status = "DEAD"
-                elseif spawnTime > now then
-                    status = "SPAWNING"
-                else
-                    status = "ALIVE"
-                end
-
-                table.insert(allBosses, {
-                    world = data.world,
-                    type = isAngel and "Angel" or "Boss",
-                    name = isAngel and "Boss Angel" or data.bossEvent:gsub("_BossEvent", ""),
-                    spawn = data.spawn,
-                    health = health,
-                    maxHealth = maxHealth,
-                    status = status,
-                    spawnTime = spawnTime,
-                    despawnTime = despawnTime,
-                    timeUntilSpawn = timeUntilSpawn,
-                    timeUntilDespawn = timeUntilDespawn,
-                    coords = isAngel and data.angel or data.boss,
-                    serverPart = part,
-                })
-            end
-        end
-    end)
-
-    -- Sort by time until spawn (spawning soon first, then alive, then dead)
+    -- Sort: active first (by despawn time), then by time until spawn
     table.sort(allBosses, function(a, b)
-        -- Alive bosses first
-        if a.status == "ALIVE" and b.status ~= "ALIVE" then return true end
-        if a.status ~= "ALIVE" and b.status == "ALIVE" then return false end
-        -- Then spawning soon
-        if a.status == "SPAWNING" and b.status == "SPAWNING" then
-            return a.timeUntilSpawn < b.timeUntilSpawn
+        if a.active and not b.active then return true end
+        if not a.active and b.active then return false end
+        if a.active and b.active then
+            return a.timeUntilDespawn < b.timeUntilDespawn
         end
-        if a.status == "SPAWNING" and b.status ~= "SPAWNING" then return true end
-        if a.status ~= "SPAWNING" and b.status == "SPAWNING" then return false end
-        -- Then by world
-        return a.world < b.world
+        return a.timeUntilSpawn < b.timeUntilSpawn
     end)
 
-    local aliveCount, spawningCount, deadCount = 0, 0, 0
+    local activeCount, soonCount, laterCount = 0, 0, 0
 
     for _, boss in ipairs(allBosses) do
-        local timeStr = ""
-        if boss.status == "ALIVE" then
-            aliveCount = aliveCount + 1
-            timeStr = string.format("HP: %d/%d | Despawn: %.0fs", boss.health, boss.maxHealth, boss.timeUntilDespawn)
-        elseif boss.status == "SPAWNING" then
-            spawningCount = spawningCount + 1
-            local mins = math.floor(boss.timeUntilSpawn / 60)
-            local secs = math.floor(boss.timeUntilSpawn % 60)
-            timeStr = string.format("Spawns in: %dm %ds", mins, secs)
+        local icon, timeStr, color
+
+        if boss.active then
+            activeCount = activeCount + 1
+            icon = "🟢"
+            timeStr = "ACTIVE - " .. formatTimeRemaining(boss.timeUntilDespawn) .. " left"
+        elseif boss.timeUntilSpawn <= 1800 then -- 30 mins
+            soonCount = soonCount + 1
+            icon = "🟡"
+            timeStr = "Spawns in: " .. formatTimeRemaining(boss.timeUntilSpawn)
         else
-            deadCount = deadCount + 1
-            timeStr = "Dead"
+            laterCount = laterCount + 1
+            icon = "⚪"
+            timeStr = "Spawns in: " .. formatTimeRemaining(boss.timeUntilSpawn)
         end
 
-        local icon = boss.status == "ALIVE" and "🟢" or (boss.status == "SPAWNING" and "🟡" or "🔴")
-        log(string.format("%s W%d %s: %s | %s", icon, boss.world, boss.type, boss.name, timeStr))
+        local typeStr = boss.isAngel and "[Angel]" or "[Boss]"
+        log(string.format("%s %s %s @ %s | %s", icon, typeStr, boss.displayName, boss.map, timeStr))
     end
 
     log("")
-    log(string.format("Summary: %d Alive | %d Spawning | %d Dead", aliveCount, spawningCount, deadCount))
+    log(string.format("Summary: %d Active | %d Soon (<30m) | %d Later", activeCount, soonCount, laterCount))
+    log("Formula: anchor = h*3600 + m*60 + 10800, cycle = cooldown")
     log("====== END ======")
 
     -- Store for potential teleport use

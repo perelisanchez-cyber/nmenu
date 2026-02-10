@@ -138,6 +138,22 @@ local function loadBossTimesDebug()
         return string.format("%d:%02d", math.floor(seconds / 60), math.floor(seconds) % 60)
     end
 
+    -- UTC+3 timezone offset (server uses Moscow time)
+    local TIMEZONE_OFFSET = 10800
+
+    local function getNextSpawn(config)
+        local now = workspace:GetServerTimeNow()
+        local anchor = config.startTime.hour * 3600 + config.startTime.min * 60 + TIMEZONE_OFFSET
+        local cd = config.cooldown
+        local dur = config.duration
+        local n = math.floor((now - anchor) / cd)
+        local spawnTime = anchor + n * cd
+        if now > spawnTime + dur then
+            spawnTime = spawnTime + cd
+        end
+        return spawnTime, spawnTime + dur
+    end
+
     local function runDebug()
         rawOutput = ""
         outputLabel.Text = ""
@@ -145,80 +161,74 @@ local function loadBossTimesDebug()
 
         log("========== BOSS TIMES DEBUG ==========", "rgb(255,200,100)")
         log("Server Time: " .. tostring(serverTime))
+        log("Timezone: UTC+3 (offset: 10800s)")
 
-        local WorldBossData, EventManagerShared
+        local WorldBossData
         local wbdPath = ReplicatedStorage:FindFirstChild("SharedModules") and ReplicatedStorage.SharedModules:FindFirstChild("WorldBossData")
         if wbdPath then
             local ok, res = pcall(require, wbdPath)
             if ok then WorldBossData = res; log("[OK] WorldBossData loaded", "rgb(100,255,150)")
-            else log("[ERR] WorldBossData: " .. tostring(res), "rgb(255,100,100)") end
-        else log("[ERR] WorldBossData not found", "rgb(255,100,100)") end
+            else log("[ERR] WorldBossData: " .. tostring(res), "rgb(255,100,100)"); return end
+        else log("[ERR] WorldBossData not found", "rgb(255,100,100)"); return end
 
-        local emsPath = ReplicatedStorage:FindFirstChild("SharedModules") and ReplicatedStorage.SharedModules:FindFirstChild("EventManagerShared")
-        if emsPath then
-            local ok, res = pcall(require, emsPath)
-            if ok then EventManagerShared = res; log("[OK] EventManagerShared loaded", "rgb(100,255,150)")
-            else log("[ERR] EventManagerShared: " .. tostring(res), "rgb(255,100,100)") end
+        if not WorldBossData.BossConfigs then
+            log("[ERR] WorldBossData.BossConfigs not found", "rgb(255,100,100)")
+            return
         end
 
-        if WorldBossData then
-            log("\n--- WorldBossData Keys ---", "rgb(255,200,100)")
-            for k, v in pairs(WorldBossData) do
-                log("  " .. k .. " (" .. typeof(v) .. ")", "rgb(200,200,255)")
-            end
-            if WorldBossData.eventSuffix then
-                log("  eventSuffix = " .. tostring(WorldBossData.eventSuffix), "rgb(255,255,150)")
-            end
+        log("\n--- Boss Spawn Times (from BossConfigs) ---", "rgb(255,200,100)")
+
+        local allBosses = {}
+        for name, config in pairs(WorldBossData.BossConfigs) do
+            local spawnTime, despawnTime = getNextSpawn(config)
+            local timeUntilSpawn = spawnTime - serverTime
+            local timeUntilDespawn = despawnTime - serverTime
+            local active = timeUntilSpawn <= 0 and timeUntilDespawn > 0
+            local isAngel = name:find("BossAngel") ~= nil
+
+            table.insert(allBosses, {
+                name = name,
+                map = config.MapId or "?",
+                isAngel = isAngel,
+                active = active,
+                timeUntilSpawn = timeUntilSpawn,
+                timeUntilDespawn = timeUntilDespawn,
+            })
         end
 
-        local wbFolder = workspace:FindFirstChild("Server") and workspace.Server:FindFirstChild("Enemies") and workspace.Server.Enemies:FindFirstChild("WorldBoss")
-        if wbFolder then
-            log("\n--- Boss Blocks ---", "rgb(255,200,100)")
-            for _, mapFolder in ipairs(wbFolder:GetChildren()) do
-                log("[MAP] " .. mapFolder.Name, "rgb(255,200,150)")
-                for _, boss in ipairs(mapFolder:GetChildren()) do
-                    if boss:IsA("BasePart") then
-                        log("  " .. boss.Name, "rgb(200,255,200)")
-                        for attr, val in pairs(boss:GetAttributes()) do
-                            log("    [Attr] " .. attr .. " = " .. tostring(val), "rgb(180,180,255)")
-                        end
-                        if WorldBossData then
-                            if WorldBossData.GetSpawnTime then
-                                local ok, st = pcall(WorldBossData.GetSpawnTime, boss)
-                                if ok then log("    GetSpawnTime = " .. tostring(st) .. " (in " .. formatTime(st - serverTime) .. ")", "rgb(100,255,200)")
-                                else log("    GetSpawnTime ERR: " .. tostring(st), "rgb(255,100,100)") end
-                            end
-                            if WorldBossData.GetDespawnTime then
-                                local ok, dt = pcall(WorldBossData.GetDespawnTime, boss)
-                                if ok then log("    GetDespawnTime = " .. tostring(dt) .. " (in " .. formatTime(dt - serverTime) .. ")", "rgb(255,200,100)")
-                                else log("    GetDespawnTime ERR: " .. tostring(dt), "rgb(255,100,100)") end
-                            end
-                            if WorldBossData.IsDied then
-                                local ok, died = pcall(WorldBossData.IsDied, boss)
-                                if ok then
-                                    local col = died and "rgb(255,100,100)" or "rgb(100,255,100)"
-                                    log("    IsDied = " .. tostring(died), col)
-                                end
-                            end
-                            if EventManagerShared and EventManagerShared.GetEventStatus then
-                                local evtName = boss.Name .. (WorldBossData.eventSuffix or "")
-                                local ok, status = pcall(EventManagerShared.GetEventStatus, evtName)
-                                if ok and status then
-                                    log("    Event: " .. evtName, "rgb(200,150,255)")
-                                    log("      startTime = " .. tostring(status.startTime), "rgb(200,200,255)")
-                                    log("      endTime = " .. tostring(status.endTime), "rgb(200,200,255)")
-                                elseif ok then
-                                    log("    Event '" .. evtName .. "' = nil", "rgb(255,200,100)")
-                                end
-                            end
-                        end
-                    end
-                end
+        -- Sort: active first, then by spawn time
+        table.sort(allBosses, function(a, b)
+            if a.active and not b.active then return true end
+            if not a.active and b.active then return false end
+            if a.active and b.active then return a.timeUntilDespawn < b.timeUntilDespawn end
+            return a.timeUntilSpawn < b.timeUntilSpawn
+        end)
+
+        local activeCount, soonCount = 0, 0
+        for _, boss in ipairs(allBosses) do
+            local icon, timeStr
+            if boss.active then
+                activeCount = activeCount + 1
+                icon = "🟢"
+                timeStr = "ACTIVE - " .. formatTime(boss.timeUntilDespawn) .. " left"
+            elseif boss.timeUntilSpawn <= 1800 then
+                soonCount = soonCount + 1
+                icon = "🟡"
+                timeStr = "Spawns in: " .. formatTime(boss.timeUntilSpawn)
+            else
+                icon = "⚪"
+                timeStr = "Spawns in: " .. formatTime(boss.timeUntilSpawn)
             end
-        else
-            log("[ERR] WorldBoss folder not found at workspace.Server.Enemies.WorldBoss", "rgb(255,100,100)")
+
+            local typeStr = boss.isAngel and "[Angel]" or "[Boss]"
+            local displayName = boss.isAngel and boss.name:gsub("BossAngel_", "Angel ") or boss.name
+            log(string.format("%s %s %s @ %s", icon, typeStr, displayName, boss.map), boss.active and "rgb(100,255,100)" or (boss.timeUntilSpawn <= 1800 and "rgb(255,220,100)" or "rgb(200,200,200)"))
+            log("    " .. timeStr, boss.active and "rgb(100,255,100)" or "rgb(180,180,200)")
         end
 
+        log("")
+        log(string.format("Summary: %d Active | %d Soon (<30m) | %d Total", activeCount, soonCount, #allBosses), "rgb(255,200,100)")
+        log("Formula: anchor = h*3600 + m*60 + 10800, cycle = cooldown", "rgb(150,150,180)")
         log("\n========== DEBUG COMPLETE ==========", "rgb(255,200,100)")
     end
 
