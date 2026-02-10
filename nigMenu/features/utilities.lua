@@ -244,26 +244,38 @@ local function setupFasterEggOpening()
             local LP = Config.LocalPlayer
             local stars = require(LP.PlayerScripts.MetaService.Client.Stars)
             local originalStarOpen = stars.StarOpen
-            
+
             stars.StarOpen = function(petData)
                 if not Config.Toggles.utilityToggles.FasterEggOpening then
                     return originalStarOpen(petData)
                 end
-                
-                -- Temporarily speed up task.wait
+
+                -- Try to speed up by using hookfunction if available (some executors)
+                local hooked = false
                 local originalWait = task.wait
-                task.wait = function(duration)
-                    if duration and duration > 0.1 then
-                        return originalWait(0.05)
+
+                pcall(function()
+                    if hookfunction then
+                        local fastWait = function(duration)
+                            if duration and duration > 0.1 then
+                                return originalWait(0.02)
+                            end
+                            return originalWait(duration)
+                        end
+                        hookfunction(task.wait, fastWait)
+                        hooked = true
                     end
-                    return originalWait(duration)
-                end
-                
+                end)
+
                 local result = originalStarOpen(petData)
-                
-                -- Restore original wait
-                task.wait = originalWait
-                
+
+                -- Restore if we hooked
+                if hooked then
+                    pcall(function()
+                        hookfunction(task.wait, originalWait)
+                    end)
+                end
+
                 return result
             end
         end)
