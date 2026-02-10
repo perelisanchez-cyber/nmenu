@@ -19,6 +19,15 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.25",
+        date = "2026-02-10",
+        entries = {
+            { type = "added", text = "Roulette-based trait roller — rolls 5 options and picks best S/SS trait automatically" },
+            { type = "added", text = "Bridge.OnClientEvent listener to capture roulette results in real-time" },
+            { type = "added", text = "RouletteServer.Pick integration to select optimal trait from options" },
+        }
+    },
+    {
         version = "1.0.24",
         date = "2026-02-10",
         entries = {

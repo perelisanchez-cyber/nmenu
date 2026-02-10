@@ -4,33 +4,41 @@
     ============================================================================
 
     Auto-roll general traits until target rarity (S or SS) is achieved.
-    - Select a general
-    - Select target rarity
-    - Start/Stop rolling
-    - View stats and progress
+    Uses roulette system - rolls 5 options and picks the best one.
 ]]
 
 local GeneralsTab = {}
+
+-- Services
+local RS = game:GetService("ReplicatedStorage")
 
 -- Lazy load references
 local function getNM() return _G.nigMenu end
 local function getConfig() return _G.nigMenu and _G.nigMenu.Config end
 local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
-local function getBridge()
-    local Config = getConfig()
-    return Config and Config.Bridge
-end
 
--- UI references
+-- State
 local selectedGeneralUUID = nil
 local selectedGeneralName = nil
 local targetRarity = "SS"
 local isRolling = false
 
+-- Roulette state
+local pendingRewards = nil
+local currentRouletteId = nil
+local waitingForResult = false
+local bridgeConnection = nil
+
 -- Stats
 local rollCount = 0
 local startTime = 0
 local rarityCount = { D = 0, C = 0, B = 0, A = 0, S = 0, SS = 0 }
+
+-- Config
+local ROLL_COUNT = 5
+local ROLL_DELAY = 1.5
+local PICK_DELAY = 0.5
+local RESULT_TIMEOUT = 10
 
 -- UI Labels
 local statusLabel = nil
@@ -41,7 +49,7 @@ local distributionLabel = nil
 local startStopBtn = nil
 local generalsList = {}
 
--- TraitsService reference (loaded at runtime)
+-- TraitsService reference
 local TraitsService = nil
 
 -- ============================================================================
@@ -51,7 +59,6 @@ local TraitsService = nil
 local function loadTraitsService()
     if TraitsService then return true end
 
-    local RS = game:GetService("ReplicatedStorage")
     local sm = RS:FindFirstChild("SharedModules")
     if sm then
         local ts = sm:FindFirstChild("TraitsService")
@@ -93,53 +100,111 @@ local function getCurrentTrait(uuid)
     return nil, nil, nil
 end
 
-local function rollTrait(uuid)
-    local payload = {
-        generalId = uuid,
-        count = 1
-    }
+-- Decode trait from ID
+local function decodeTrait(traitId)
+    if not loadTraitsService() then return traitId, "?", "" end
 
-    print("[Generals] rollTrait called with UUID:", uuid)
-    print("[Generals] Payload:", game:GetService("HttpService"):JSONEncode(payload))
-
-    -- Always use direct ReplicatedStorage.Bridge access
-    local RS = game:GetService("ReplicatedStorage")
-    local Bridge = RS:WaitForChild("Bridge", 5)
-
-    if Bridge then
-        print("[Generals] Bridge found:", tostring(Bridge))
-        print("[Generals] Firing: Traits, RollGeneralTrait, payload...")
-
-        local success, err = pcall(function()
-            Bridge:FireServer("Traits", "RollGeneralTrait", payload)
-        end)
-
-        if success then
-            print("[Generals] FireServer call succeeded!")
-        else
-            warn("[Generals] FireServer FAILED:", tostring(err))
-        end
-    else
-        warn("[Generals] Bridge NOT FOUND in ReplicatedStorage!")
-
-        -- List what's in ReplicatedStorage for debugging
-        print("[Generals] ReplicatedStorage children:")
-        for _, child in ipairs(RS:GetChildren()) do
-            print("  -", child.Name, "(" .. child.ClassName .. ")")
-        end
+    local ok, trait = pcall(function() return TraitsService.GetTraitById(traitId) end)
+    if ok and trait then
+        local name = pcall(function() return trait:GetName() end) and trait:GetName() or "?"
+        local rarity = pcall(function() return trait:GetRarity() end) and trait:GetRarity() or "?"
+        local desc = pcall(function() return trait:GetDescription() end) and trait:GetDescription() or ""
+        return name, rarity, desc
     end
+    return traitId, "?", ""
 end
 
-local function hideRouletteUI()
-    -- Only hide the roulette popup, don't modify any modules
-    pcall(function()
-        local player = game:GetService("Players").LocalPlayer
-        local rouletteGui = player.PlayerGui:FindFirstChild("RouletteRoll")
-        if rouletteGui then
-            rouletteGui.Enabled = false
+-- Extract rarity prefix from trait ID (e.g., SS_Damage -> SS)
+local function getRarityFromId(traitId)
+    local prefix = traitId:match("^(%a+)_")
+    return prefix or "?"
+end
+
+-- ============================================================================
+-- BRIDGE COMMUNICATION
+-- ============================================================================
+
+local function setupBridgeListener()
+    if bridgeConnection then return end
+
+    local Bridge = RS:FindFirstChild("Bridge")
+    if not Bridge then
+        warn("[Generals] Bridge not found!")
+        return
+    end
+
+    bridgeConnection = Bridge.OnClientEvent:Connect(function(...)
+        local args = {...}
+        for _, arg in ipairs(args) do
+            if type(arg) == "table" then
+                for _, msg in ipairs(arg) do
+                    if type(msg) == "table" and msg.moduleName == "SpinRoulette" and msg.functionName == "CreateByServer" then
+                        if type(msg.info) == "table" then
+                            for _, entry in ipairs(msg.info) do
+                                if entry.rouletteId == "GeneralTraits" and entry.rewardList then
+                                    currentRouletteId = entry.id
+                                    pendingRewards = entry.rewardList
+                                    waitingForResult = false
+                                    print("[Generals] Received roulette:", currentRouletteId, "with", #pendingRewards, "options")
+                                end
+                            end
+                        end
+                    end
+                end
+            end
         end
     end)
+
+    print("[Generals] Bridge listener setup complete")
 end
+
+local function doRoll(uuid)
+    local Bridge = RS:FindFirstChild("Bridge")
+    if not Bridge then
+        warn("[Generals] Bridge not found!")
+        return false
+    end
+
+    local payload = {
+        generalId = uuid,
+        count = ROLL_COUNT
+    }
+
+    local success, err = pcall(function()
+        Bridge:FireServer("Traits", "RollGeneralTrait", payload)
+    end)
+
+    if not success then
+        warn("[Generals] Roll failed:", err)
+    end
+
+    return success
+end
+
+local function doPick(rouletteId, slotIndex)
+    local Bridge = RS:FindFirstChild("Bridge")
+    if not Bridge then
+        warn("[Generals] Bridge not found!")
+        return false
+    end
+
+    local success, err = pcall(function()
+        Bridge:FireServer("RouletteServer", "Pick", {
+            id = rouletteId,
+            rewardIndex = slotIndex
+        })
+    end)
+
+    if not success then
+        warn("[Generals] Pick failed:", err)
+    end
+
+    return success
+end
+
+-- ============================================================================
+-- UI HELPERS
+-- ============================================================================
 
 local function formatTime(seconds)
     local mins = math.floor(seconds / 60)
@@ -151,7 +216,7 @@ local function getDistributionString()
     local parts = {}
     for _, r in ipairs({"D", "C", "B", "A", "S", "SS"}) do
         if rarityCount[r] > 0 then
-            local pct = (rarityCount[r] / rollCount) * 100
+            local pct = (rarityCount[r] / math.max(rollCount, 1)) * 100
             table.insert(parts, string.format("%s:%d (%.1f%%)", r, rarityCount[r], pct))
         end
     end
@@ -159,6 +224,8 @@ local function getDistributionString()
 end
 
 local function updateUI()
+    local Config = getConfig()
+
     if statusLabel and statusLabel.Parent then
         if isRolling then
             statusLabel.Text = "Rolling..."
@@ -187,7 +254,6 @@ local function updateUI()
         if rarity and name then
             currentTraitLabel.Text = "Current: " .. rarity .. " - " .. name
 
-            -- Color based on rarity
             local colors = {
                 D = Color3.fromRGB(150, 150, 150),
                 C = Color3.fromRGB(100, 200, 100),
@@ -247,99 +313,140 @@ local function selectGeneral(uuid, name, btn)
     updateUI()
 end
 
+-- ============================================================================
+-- ROLLING LOGIC
+-- ============================================================================
+
 local function startRolling()
     if not selectedGeneralUUID then
         print("[Generals] No general selected!")
         return
     end
 
-    print("[Generals] Starting trait roller for UUID: " .. selectedGeneralUUID)
-    print("[Generals] Target rarity: " .. targetRarity)
+    -- Setup bridge listener
+    setupBridgeListener()
+
+    print("[Generals] Starting trait roller for:", selectedGeneralName)
+    print("[Generals] Target rarity:", targetRarity)
+    print("[Generals] Rolling", ROLL_COUNT, "options per roll")
 
     isRolling = true
     rollCount = 0
     startTime = tick()
     rarityCount = { D = 0, C = 0, B = 0, A = 0, S = 0, SS = 0 }
 
-    hideRouletteUI()
     updateUI()
 
     task.spawn(function()
         local Config = getConfig()
 
-        print("[Generals] Rolling loop started...")
-
         while isRolling and Config and Config.State.running do
-            -- Roll the trait
-            print("[Generals] Rolling #" .. (rollCount + 1) .. "...")
-            rollTrait(selectedGeneralUUID)
+            -- Reset state for this roll
+            pendingRewards = nil
+            currentRouletteId = nil
+            waitingForResult = true
+
             rollCount = rollCount + 1
+            print("[Generals] Roll #" .. rollCount .. "...")
 
-            -- Wait for server response
-            task.wait(1)
+            -- Fire the roll
+            if not doRoll(selectedGeneralUUID) then
+                print("[Generals] Roll failed, retrying...")
+                task.wait(1)
+                continue
+            end
 
-            -- Hide UI again in case it re-appeared
-            hideRouletteUI()
+            -- Wait for roulette result
+            local timeout = 0
+            while waitingForResult or not pendingRewards do
+                task.wait(0.1)
+                timeout = timeout + 0.1
+                if timeout > RESULT_TIMEOUT then
+                    print("[Generals] Timeout waiting for roll result")
+                    break
+                end
+                if not isRolling then return end
+            end
 
-            -- Check the result
-            local rarity, name, _ = getCurrentTrait(selectedGeneralUUID)
+            if not pendingRewards then
+                print("[Generals] No rewards received, retrying...")
+                task.wait(1)
+                continue
+            end
 
-            if rarity and name then
-                rarityCount[rarity] = (rarityCount[rarity] or 0) + 1
+            -- Check all options for target rarity
+            local bestSlot = nil
+            local bestRarity = nil
 
-                -- Directly update the current trait label with fresh data
-                if currentTraitLabel and currentTraitLabel.Parent then
-                    currentTraitLabel.Text = "Current: " .. rarity .. " - " .. name
-                    local colors = {
-                        D = Color3.fromRGB(150, 150, 150),
-                        C = Color3.fromRGB(100, 200, 100),
-                        B = Color3.fromRGB(100, 150, 255),
-                        A = Color3.fromRGB(200, 100, 255),
-                        S = Color3.fromRGB(255, 200, 50),
-                        SS = Color3.fromRGB(255, 80, 80)
-                    }
-                    currentTraitLabel.TextColor3 = colors[rarity] or Color3.fromRGB(200, 200, 200)
+            print("[Generals] Checking", #pendingRewards, "options:")
+
+            for idx, traitId in ipairs(pendingRewards) do
+                local name, rarity, desc = decodeTrait(traitId)
+                local rarityPrefix = getRarityFromId(traitId)
+
+                -- Track stats
+                if rarityCount[rarityPrefix] then
+                    rarityCount[rarityPrefix] = rarityCount[rarityPrefix] + 1
                 end
 
-                -- Check if we hit target
-                local hitTarget = false
-                if targetRarity == "SS" and rarity == "SS" then
-                    hitTarget = true
-                elseif targetRarity == "S" and (rarity == "S" or rarity == "SS") then
-                    hitTarget = true
+                local isTarget = false
+                if targetRarity == "SS" and rarityPrefix == "SS" then
+                    isTarget = true
+                elseif targetRarity == "S" and (rarityPrefix == "S" or rarityPrefix == "SS") then
+                    isTarget = true
                 end
 
-                if hitTarget then
-                    local elapsed = tick() - startTime
-                    isRolling = false
-
-                    print("=====================================")
-                    print("SUCCESS! GOT " .. rarity .. " TIER!")
-                    print("=====================================")
-                    print("Trait:", name)
-                    print("Rarity:", rarity)
-                    print("Total Rolls:", rollCount)
-                    print("Time:", formatTime(elapsed))
-                    print("=====================================")
-                end
-
-                -- Progress update every 25 rolls
-                if rollCount % 25 == 0 then
-                    local elapsed = tick() - startTime
-                    local rps = rollCount / elapsed
-                    print(string.format("[Generals] %d rolls | %.1f rolls/sec | Current: %s-%s",
-                        rollCount, rps, rarity, name))
-                end
-            else
-                -- If we couldn't read the trait, show that
-                if currentTraitLabel and currentTraitLabel.Parent then
-                    currentTraitLabel.Text = "Current: Reading..."
-                    currentTraitLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+                if isTarget then
+                    -- Prefer SS over S
+                    if not bestSlot then
+                        bestSlot = idx
+                        bestRarity = rarityPrefix
+                    elseif rarityPrefix == "SS" and bestRarity ~= "SS" then
+                        bestSlot = idx
+                        bestRarity = rarityPrefix
+                    end
+                    print(string.format("  [%d] %s [%s] <<< TARGET", idx, name, rarity))
+                else
+                    print(string.format("  [%d] %s [%s]", idx, name, rarity))
                 end
             end
 
+            if bestSlot then
+                -- Found target - pick it!
+                local name, rarity, _ = decodeTrait(pendingRewards[bestSlot])
+                print("[Generals] PICKING SLOT", bestSlot, ":", name, "[" .. rarity .. "]")
+
+                task.wait(PICK_DELAY)
+                doPick(currentRouletteId, bestSlot)
+
+                local elapsed = tick() - startTime
+                print("=====================================")
+                print("SUCCESS! GOT " .. bestRarity .. " TIER!")
+                print("=====================================")
+                print("Trait:", name)
+                print("Rarity:", rarity)
+                print("Total Rolls:", rollCount)
+                print("Time:", formatTime(elapsed))
+                print("=====================================")
+
+                -- Update status
+                if statusLabel and statusLabel.Parent then
+                    statusLabel.Text = "FOUND " .. bestRarity .. "!"
+                    statusLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+                end
+
+                isRolling = false
+                updateUI()
+                return
+            else
+                -- No target found - pick slot 1 and continue
+                print("[Generals] No S/SS found, picking slot 1 and continuing...")
+                task.wait(PICK_DELAY)
+                doPick(currentRouletteId, 1)
+                task.wait(ROLL_DELAY)
+            end
+
             updateUI()
-            task.wait(0.1)
         end
 
         isRolling = false
@@ -393,7 +500,7 @@ function GeneralsTab.init()
         Size = UDim2.new(0, 300, 0, 14),
         Position = UDim2.new(0, 60, 0, 30),
         BackgroundTransparency = 1,
-        Text = 'Auto-roll traits until target rarity is achieved',
+        Text = 'Rolls 5 options, picks best S/SS trait',
         TextColor3 = T.TextMuted,
         TextSize = 12,
         Font = Enum.Font.Gotham,
@@ -642,7 +749,7 @@ function GeneralsTab.init()
         Size = UDim2.new(1, -20, 0, 50),
         Position = UDim2.new(0, 12, 0, 6),
         BackgroundTransparency = 1,
-        Text = 'Rolls traits rapidly until target rarity achieved.\nS target accepts both S and SS traits.\nSS target only accepts SS traits.',
+        Text = 'Rolls 5 traits per attempt and picks best one.\nS target accepts both S and SS traits.\nSS target only accepts SS traits.',
         TextColor3 = T.TextDim,
         TextSize = 10,
         Font = Enum.Font.Gotham,
@@ -667,6 +774,15 @@ function GeneralsTab.onShow()
             currentTraitLabel.Text = "Current: " .. rarity .. " - " .. name
         end
     end
+end
+
+function GeneralsTab.cleanup()
+    -- Disconnect bridge listener
+    if bridgeConnection then
+        bridgeConnection:Disconnect()
+        bridgeConnection = nil
+    end
+    isRolling = false
 end
 
 return GeneralsTab
