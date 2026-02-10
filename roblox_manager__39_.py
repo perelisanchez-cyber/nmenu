@@ -396,25 +396,55 @@ def extract_link_code(url_text):
 # ============================================================================
 
 class Theme:
-    bg = "#0d0f14"
-    bg_card = "#151820"
-    bg_card_hover = "#1a1f2a"
-    bg_input = "#0f1118"
-    accent = "#e8600a"
-    accent_hover = "#ff7a1a"
-    accent_dim = "#8a3e06"
-    green = "#22c55e"
+    # Modern purple dashboard theme
+    sidebar = "#1e1b4b"          # Dark purple sidebar
+    sidebar_hover = "#312e81"     # Sidebar hover
+    sidebar_active = "#4338ca"    # Active sidebar item
+
+    bg = "#f8fafc"               # Light gray main background
+    bg_card = "#ffffff"          # White cards
+    bg_card_hover = "#f1f5f9"    # Card hover
+    bg_input = "#f1f5f9"         # Input background
+
+    primary = "#6366f1"          # Indigo/purple primary
+    primary_hover = "#4f46e5"    # Primary hover
+    primary_dim = "#312e81"      # Darker purple
+
+    accent = "#6366f1"           # Same as primary for consistency
+    accent_hover = "#4f46e5"
+    accent_dim = "#312e81"
+
+    green = "#22c55e"            # Success green
     green_dim = "#166534"
-    red = "#ef4444"
-    red_dim = "#7f1d1d"
-    blue = "#3b82f6"
-    blue_dim = "#1e3a5f"
-    yellow = "#eab308"
-    text = "#e4e4e7"
-    text_muted = "#9ca3af"
-    text_dim = "#4b5563"
-    border = "#1e2330"
-    border_light = "#2a3040"
+    green_light = "#dcfce7"      # Light green bg
+
+    red = "#ef4444"              # Error red
+    red_dim = "#991b1b"
+    red_light = "#fee2e2"        # Light red bg
+
+    blue = "#3b82f6"             # Info blue
+    blue_dim = "#1e40af"
+    blue_light = "#dbeafe"       # Light blue bg
+
+    yellow = "#eab308"           # Warning yellow
+    yellow_light = "#fef9c3"     # Light yellow bg
+
+    orange = "#f97316"           # Orange accent
+    orange_light = "#ffedd5"
+
+    text = "#1e293b"             # Dark text
+    text_muted = "#64748b"       # Muted text
+    text_dim = "#94a3b8"         # Dim text
+    text_light = "#ffffff"       # White text (for dark bg)
+
+    border = "#e2e8f0"           # Light border
+    border_dark = "#cbd5e1"      # Darker border
+
+    # Stats card colors
+    stat_purple = "#8b5cf6"
+    stat_green = "#22c55e"
+    stat_orange = "#f97316"
+    stat_blue = "#3b82f6"
 
 
 # ============================================================================
@@ -2046,10 +2076,10 @@ class RobloxManagerApp:
     def __init__(self, root):
         self.root = root
         self.root.title(f"Roblox Manager - {CURRENT_PROFILE}")
-        self.root.geometry("560x820")
+        self.root.geometry("900x700")
         self.root.configure(bg=Theme.bg)
         self.root.resizable(True, True)
-        self.root.minsize(520, 600)
+        self.root.minsize(800, 600)
 
         if IS_WINDOWS:
             try:
@@ -2111,41 +2141,125 @@ class RobloxManagerApp:
         self.log_text.see("end")
 
     # ----------------------------------------------------------------
-    # UI BUILD
+    # UI BUILD - Modern Sidebar Layout
     # ----------------------------------------------------------------
     def _build_ui(self):
-        # Header
-        header = tk.Frame(self.root, bg=Theme.bg_card, padx=16, pady=10)
-        header.pack(fill="x")
+        # Main container with sidebar
+        main_container = tk.Frame(self.root, bg=Theme.bg)
+        main_container.pack(fill="both", expand=True)
 
-        tk.Label(header, text="\U0001F3AE", font=("Segoe UI Emoji", 16), bg=Theme.bg_card, fg=Theme.accent).pack(side="left")
-        tf = tk.Frame(header, bg=Theme.bg_card)
-        tf.pack(side="left", padx=(10, 0))
-        tk.Label(tf, text="ROBLOX MANAGER", font=("Consolas", 13, "bold"), bg=Theme.bg_card, fg=Theme.text).pack(anchor="w")
-        tk.Label(tf, text="multi-instance \u00b7 boss farm \u00b7 v1.0", font=("Consolas", 8), bg=Theme.bg_card, fg=Theme.text_dim).pack(anchor="w")
+        # ═══════════════════════════════════════════════════════════════
+        # SIDEBAR (Left)
+        # ═══════════════════════════════════════════════════════════════
+        sidebar = tk.Frame(main_container, bg=Theme.sidebar, width=180)
+        sidebar.pack(side="left", fill="y")
+        sidebar.pack_propagate(False)
 
-        self.status_lbl = tk.Label(header, text="\u25CF ONLINE", font=("Consolas", 9, "bold"), bg=Theme.bg_card, fg=Theme.green)
-        self.status_lbl.pack(side="right")
+        # Logo/Brand
+        brand = tk.Frame(sidebar, bg=Theme.sidebar, pady=20)
+        brand.pack(fill="x")
+        tk.Label(brand, text="🎮", font=("Segoe UI Emoji", 24), bg=Theme.sidebar, fg=Theme.text_light).pack()
+        tk.Label(brand, text="Roblox Manager", font=("Segoe UI", 12, "bold"), bg=Theme.sidebar, fg=Theme.text_light).pack()
+        tk.Label(brand, text=CURRENT_PROFILE, font=("Segoe UI", 9), bg=Theme.sidebar, fg=Theme.text_dim).pack()
 
-        # Tabs
-        tab_bar = tk.Frame(self.root, bg=Theme.border)
-        tab_bar.pack(fill="x")
+        # Separator
+        tk.Frame(sidebar, bg=Theme.sidebar_hover, height=1).pack(fill="x", padx=20, pady=10)
 
+        # Navigation
         self.current_tab = tk.StringVar(value="accounts")
         self.tab_btns = {}
-        for key, label in [("accounts", "\U0001F464 Accounts"), ("servers", "\U0001F504 Servers"),
-                           ("settings", "\u2699 Settings"), ("logs", "\U0001F4CB Logs")]:
-            b = tk.Button(tab_bar, text=label, font=("Consolas", 9, "bold"), bg=Theme.bg,
-                          fg=Theme.text_muted, relief="flat", bd=0, padx=8, pady=6,
-                          activebackground=Theme.bg_card, activeforeground=Theme.accent,
-                          cursor="hand2", command=lambda k=key: self._switch_tab(k))
-            b.pack(side="left", expand=True, fill="x")
-            self.tab_btns[key] = b
+        nav_items = [
+            ("accounts", "👤", "Accounts"),
+            ("servers", "🖥️", "Servers"),
+            ("settings", "⚙️", "Settings"),
+            ("logs", "📋", "Logs"),
+        ]
 
-        tk.Frame(self.root, bg=Theme.border, height=1).pack(fill="x")
+        for key, icon, label in nav_items:
+            btn_frame = tk.Frame(sidebar, bg=Theme.sidebar, cursor="hand2")
+            btn_frame.pack(fill="x", padx=10, pady=2)
 
-        # Content
-        self.content = tk.Frame(self.root, bg=Theme.bg)
+            btn = tk.Label(btn_frame, text=f"  {icon}  {label}", font=("Segoe UI", 10),
+                          bg=Theme.sidebar, fg=Theme.text_light, anchor="w", padx=10, pady=8)
+            btn.pack(fill="x")
+
+            # Store reference
+            self.tab_btns[key] = btn
+
+            # Hover and click bindings
+            def on_enter(e, f=btn_frame, b=btn):
+                if self.current_tab.get() != [k for k, i, l in nav_items if l == b.cget("text").split("  ")[-1]][0]:
+                    f.configure(bg=Theme.sidebar_hover)
+                    b.configure(bg=Theme.sidebar_hover)
+
+            def on_leave(e, f=btn_frame, b=btn):
+                if self.current_tab.get() != [k for k, i, l in nav_items if l == b.cget("text").split("  ")[-1]][0]:
+                    f.configure(bg=Theme.sidebar)
+                    b.configure(bg=Theme.sidebar)
+
+            def on_click(e, k=key):
+                self._switch_tab(k)
+
+            btn_frame.bind("<Enter>", on_enter)
+            btn_frame.bind("<Leave>", on_leave)
+            btn_frame.bind("<Button-1>", on_click)
+            btn.bind("<Enter>", on_enter)
+            btn.bind("<Leave>", on_leave)
+            btn.bind("<Button-1>", on_click)
+
+        # Spacer
+        tk.Frame(sidebar, bg=Theme.sidebar).pack(fill="both", expand=True)
+
+        # Status indicator at bottom of sidebar
+        status_frame = tk.Frame(sidebar, bg=Theme.sidebar, pady=15)
+        status_frame.pack(fill="x", side="bottom")
+        self.status_lbl = tk.Label(status_frame, text="● ONLINE", font=("Segoe UI", 9, "bold"),
+                                   bg=Theme.sidebar, fg=Theme.green)
+        self.status_lbl.pack()
+
+        # ═══════════════════════════════════════════════════════════════
+        # MAIN CONTENT (Right)
+        # ═══════════════════════════════════════════════════════════════
+        right_panel = tk.Frame(main_container, bg=Theme.bg)
+        right_panel.pack(side="right", fill="both", expand=True)
+
+        # ─── Stats Cards Row ───
+        stats_row = tk.Frame(right_panel, bg=Theme.bg, pady=15, padx=15)
+        stats_row.pack(fill="x")
+
+        self.stat_cards = {}
+        stats_data = [
+            ("accounts", "👤", "Accounts", "0", Theme.stat_purple),
+            ("online", "🟢", "Online", "0", Theme.stat_green),
+            ("heartbeats", "💓", "Heartbeats", "0", Theme.stat_orange),
+            ("servers", "🖥️", "Servers", "0", Theme.stat_blue),
+        ]
+
+        for stat_key, icon, label, value, color in stats_data:
+            card = tk.Frame(stats_row, bg=Theme.bg_card, padx=15, pady=12,
+                           highlightbackground=Theme.border, highlightthickness=1)
+            card.pack(side="left", expand=True, fill="x", padx=5)
+
+            # Icon circle
+            icon_lbl = tk.Label(card, text=icon, font=("Segoe UI Emoji", 16), bg=Theme.bg_card, fg=color)
+            icon_lbl.pack(side="left", padx=(0, 10))
+
+            # Text
+            text_frame = tk.Frame(card, bg=Theme.bg_card)
+            text_frame.pack(side="left", fill="x", expand=True)
+
+            value_lbl = tk.Label(text_frame, text=value, font=("Segoe UI", 18, "bold"),
+                                bg=Theme.bg_card, fg=Theme.text, anchor="w")
+            value_lbl.pack(anchor="w")
+
+            label_lbl = tk.Label(text_frame, text=label, font=("Segoe UI", 9),
+                                bg=Theme.bg_card, fg=Theme.text_muted, anchor="w")
+            label_lbl.pack(anchor="w")
+
+            self.stat_cards[stat_key] = value_lbl
+
+        # ─── Content Area ───
+        self.content = tk.Frame(right_panel, bg=Theme.bg, padx=15, pady=5)
         self.content.pack(fill="both", expand=True)
 
         self.tab_frames = {}
@@ -2154,8 +2268,9 @@ class RobloxManagerApp:
         self._build_settings_tab()
         self._build_logs_tab()
 
-        # Bottom
-        bot = tk.Frame(self.root, bg=Theme.bg_card, padx=12, pady=6)
+        # ─── Bottom Status Bar ───
+        bot = tk.Frame(right_panel, bg=Theme.bg_card, padx=15, pady=8,
+                      highlightbackground=Theme.border, highlightthickness=1)
         bot.pack(fill="x", side="bottom")
         self.bot_left = tk.Label(bot, text="0 accounts", font=("Consolas", 9), bg=Theme.bg_card, fg=Theme.text_dim)
         self.bot_left.pack(side="left")
@@ -2166,18 +2281,40 @@ class RobloxManagerApp:
 
     def _switch_tab(self, key):
         self.current_tab.set(key)
+        # Update sidebar navigation highlighting
         for k, b in self.tab_btns.items():
-            b.configure(fg=Theme.accent if k == key else Theme.text_muted,
-                        bg=Theme.bg_card if k == key else Theme.bg)
+            if k == key:
+                b.configure(bg=Theme.sidebar_active, fg=Theme.text_light)
+                b.master.configure(bg=Theme.sidebar_active)
+            else:
+                b.configure(bg=Theme.sidebar, fg=Theme.text_light)
+                b.master.configure(bg=Theme.sidebar)
+        # Switch content
         for c in self.content.winfo_children():
             c.pack_forget()
-        self.tab_frames[key].pack(fill="both", expand=True, padx=12, pady=10)
+        self.tab_frames[key].pack(fill="both", expand=True)
         if key == "logs":
             self._update_log_display()
         elif key == "accounts":
             self._refresh_accounts()
         elif key == "servers":
             self._refresh_servers()
+        # Update stats
+        self._update_stats()
+
+    def _update_stats(self):
+        """Update the stats cards with current data."""
+        if not hasattr(self, 'stat_cards'):
+            return
+        # Accounts count
+        self.stat_cards["accounts"].configure(text=str(len(manager.accounts)))
+        # Online count (running instances)
+        online = sum(1 for name in manager.accounts if manager.get_instance_status(name, require_heartbeat=False)[0])
+        self.stat_cards["online"].configure(text=str(online))
+        # Heartbeats
+        self.stat_cards["heartbeats"].configure(text=str(len(manager.player_reports)))
+        # Servers count
+        self.stat_cards["servers"].configure(text=str(len(SERVERS)))
 
     def _card(self, parent):
         return tk.Frame(parent, bg=Theme.bg_card, highlightbackground=Theme.border, highlightthickness=1, padx=12, pady=10)
