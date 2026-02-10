@@ -19,6 +19,13 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.18",
+        date = "2026-02-10",
+        entries = {
+            { type = "fixed", text = "Parallel launch double-launching same account — added currently_launching tracking set" },
+        }
+    },
+    {
         version = "1.0.17",
         date = "2026-02-10",
         entries = {
