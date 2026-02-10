@@ -29,18 +29,29 @@ local PICK_DELAY = 0.5
 local RESULT_TIMEOUT = 10
 
 -- Rarity priority (higher = better)
+-- Supports both letter rarities (Fruits, etc) and word rarities (Curses, etc)
 local RARITY_PRIORITY = {
+    -- Letter rarities (D worst -> SSS best)
+    D = 1,
+    C = 2,
+    B = 3,
+    A = 4,
+    S = 5,
+    SS = 6,
+    -- Word rarities
     Common = 1,
     Uncommon = 2,
     Rare = 3,
     Epic = 4,
     Legendary = 5,
     Mythical = 6,
+    -- Top tier (both systems)
     SSS = 7
 }
 
 -- Target rarity options for each item type
-local TARGET_RARITIES = {"Legendary", "Mythical", "SSS"}
+-- Maps display name to both letter and word equivalents
+local TARGET_RARITIES = {"S", "SS", "SSS"}
 
 -- ============================================================================
 -- HELPERS
@@ -54,8 +65,15 @@ end
 
 local function getRarityColor(rarity)
     local Config = getConfig()
-    if Config and Config.AccessoryRarityColors then
-        return Config.AccessoryRarityColors[rarity]
+    if Config then
+        -- Try accessory colors first (word rarities like Mythical)
+        if Config.AccessoryRarityColors and Config.AccessoryRarityColors[rarity] then
+            return Config.AccessoryRarityColors[rarity]
+        end
+        -- Fall back to general rarity colors (letter rarities like S, SS)
+        if Config.RarityColors and Config.RarityColors[rarity] then
+            return Config.RarityColors[rarity]
+        end
     end
     return Color3.fromRGB(180, 180, 180)
 end
@@ -425,7 +443,7 @@ function ItemsTab.init()
             currentRouletteId = nil,
             waitingForResult = false,
             color = acc.color,
-            targetRarity = "Mythical",  -- Default target
+            targetRarity = "SS",  -- Default target (works for letter rarities like Fruits)
             -- UI refs
             statusLabel = nil,
             rollsLabel = nil,
