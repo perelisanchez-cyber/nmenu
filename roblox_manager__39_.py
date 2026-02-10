@@ -2319,7 +2319,6 @@ class RobloxManagerApp:
             "autoRejoinInterval": saved.get("autoRejoinInterval", 30),
             "autoRejoinServer": saved.get("autoRejoinServer", "farm"),
             "watchdogAccounts": saved.get("watchdogAccounts", []),
-            "launchStagger": saved.get("launchStagger", 5),  # seconds between account launches
         }
 
         self._build_ui()
@@ -2703,47 +2702,30 @@ class RobloxManagerApp:
         return [name for name, var in self.acc_selection.items() if var.get()]
 
     def _launch_selected(self):
-        """Launch all selected accounts with configurable stagger between each."""
+        """Launch all selected accounts sequentially."""
         selected = self._get_selected_accounts()
         if not selected:
             self.log("No accounts selected", "warn")
             return
-        if getattr(self, '_batch_launching', False):
-            self.log("Batch launch already in progress", "warn")
-            return
 
-        self._batch_launching = True
         total = len(selected)
-        stagger_delay = self.settings.get("launchStagger", 5)
-        self.log(f"Launching {total} account{'s' if total != 1 else ''} with {stagger_delay}s delay...")
+        self.log(f"Launching {total} account{'s' if total != 1 else ''}...")
 
-        def staggered():
-            delay = self.settings.get("launchStagger", 5)
-            for i, name in enumerate(selected):
-                default_srv = manager.get_default_server(name)
-                srv = default_srv if default_srv and default_srv in SERVERS else None
-                label = SERVERS[srv]["name"] if srv else "public"
+        for i, name in enumerate(selected):
+            default_srv = manager.get_default_server(name)
+            srv = default_srv if default_srv and default_srv in SERVERS else None
+            label = SERVERS[srv]["name"] if srv else "public"
 
-                self.root.after(0, lambda n=name, s=label, idx=i: self.log(
-                    f"[{idx+1}/{total}] Launching {n} \u2192 {s}..."))
+            self.log(f"[{i+1}/{total}] Launching {name} → {label}...")
 
-                r = manager.launch_instance(name, srv)
-                if r.get("success"):
-                    self.root.after(0, lambda n=name, p=r['pid']: self.log(
-                        f"\u2714 {n} launched (PID {p})", "success"))
-                else:
-                    self.root.after(0, lambda n=name, e=r.get('error', '?'): self.log(
-                        f"\u2718 {n} failed: {e}", "error"))
+            r = manager.launch_instance(name, srv)
+            if r.get("success"):
+                self.log(f"✔ {name} launched (PID {r['pid']})", "success")
+            else:
+                self.log(f"✘ {name} failed: {r.get('error', '?')}", "error")
 
-                # Wait configured delay before next launch (skip after last one)
-                if i < total - 1:
-                    time.sleep(delay)
-
-            self._batch_launching = False
-            self.root.after(0, lambda: self.log(f"Batch launch complete ({total} accounts)", "success"))
-            self.root.after(500, self._refresh_accounts)
-
-        threading.Thread(target=staggered, daemon=True).start()
+        self.log(f"Launch complete ({total} accounts)", "success")
+        self.root.after(500, self._refresh_accounts)
 
     def _login_browser(self):
         if getattr(self, '_login_pending', False):
@@ -3244,26 +3226,6 @@ class RobloxManagerApp:
         self.ar_status = tk.Label(arc, text="", font=("Consolas", 9, "bold"), bg=Theme.bg_card, fg=Theme.accent)
         self.ar_status.pack(anchor="w", pady=(8, 0))
 
-        # Launch Settings
-        self._lbl(f, "LAUNCH SETTINGS").pack(anchor="w", pady=(14, 6))
-        lsc = self._card(f)
-        lsc.pack(fill="x")
-
-        tk.Label(lsc, text="Delay between account launches (prevents rate limiting):",
-                 font=("Consolas", 8), bg=Theme.bg_card, fg=Theme.text_dim).pack(anchor="w", pady=(0, 6))
-
-        stagger_frame = tk.Frame(lsc, bg=Theme.bg_card)
-        stagger_frame.pack(fill="x")
-        tk.Label(stagger_frame, text="Stagger:", font=("Consolas", 9), bg=Theme.bg_card, fg=Theme.text_muted).pack(side="left")
-        self.stagger_var = tk.IntVar(value=self.settings.get("launchStagger", 5))
-        self.stagger_lbl = tk.Label(stagger_frame, text=f"{self.settings.get('launchStagger', 5)}s",
-                                    font=("Consolas", 9, "bold"), bg=Theme.bg_card, fg=Theme.accent, width=5)
-        self.stagger_lbl.pack(side="left", padx=(8, 0))
-        tk.Scale(stagger_frame, from_=1, to=10, orient="horizontal", variable=self.stagger_var,
-                 bg=Theme.bg_card, fg=Theme.text, troughcolor=Theme.bg_input,
-                 highlightthickness=0, showvalue=False, sliderrelief="flat",
-                 command=lambda v: (self.stagger_lbl.configure(text=f"{int(float(v))}s"), self._save_settings())).pack(side="left", fill="x", expand=True)
-
         # Window Layout
         self._lbl(f, "WINDOW LAYOUT").pack(anchor="w", pady=(14, 6))
         wlc = self._card(f)
@@ -3316,7 +3278,6 @@ class RobloxManagerApp:
         self.settings["autoRejoinInterval"] = self.ar_delay_var.get()
         self.settings["autoRejoinServer"] = self.ar_srv_var.get()
         self.settings["requireHeartbeat"] = self.ar_heartbeat_var.get()
-        self.settings["launchStagger"] = self.stagger_var.get()
         # Update watched accounts from checkboxes
         self.watchdog_accounts = {}
         srv = self.ar_srv_var.get()
@@ -3345,7 +3306,6 @@ class RobloxManagerApp:
                 "autoRejoinInterval": self.settings["autoRejoinInterval"],
                 "autoRejoinServer": self.settings["autoRejoinServer"],
                 "watchdogAccounts": self.settings.get("watchdogAccounts", []),
-                "launchStagger": self.settings.get("launchStagger", 5),
             }
             with open(DATA_FILE, "w") as f:
                 json.dump(data, f, indent=2)
@@ -3360,8 +3320,6 @@ class RobloxManagerApp:
         self.ar_delay_var.set(self.settings["autoRejoinInterval"])
         self.ar_delay_lbl.configure(text=f"{self.settings['autoRejoinInterval']}s")
         self.ar_srv_var.set(self.settings["autoRejoinServer"])
-        self.stagger_var.set(self.settings.get("launchStagger", 5))
-        self.stagger_lbl.configure(text=f"{self.settings.get('launchStagger', 5)}s")
         self._refresh_watchdog_accounts()
         self._setup_watchdog()
 
@@ -3462,28 +3420,16 @@ class RobloxManagerApp:
                     except Exception as ex:
                         self.root.after(0, lambda e=str(ex): self.log(f"Watchdog error: {e}", "error"))
 
-                # Relaunch all offline accounts IN PARALLEL (with stagger)
-                if accounts_to_relaunch:
-                    def relaunch_one(acc_name):
-                        try:
-                            # Double-check account isn't already running before launching
-                            running, pid, _ = manager.get_instance_status(acc_name, require_heartbeat=False)
-                            if running and pid:
-                                self.root.after(0, lambda a=acc_name, p=pid: self.log(
-                                    f"⚠️ {a} already running (PID {p}), skipping relaunch"))
-                                return
-                            self._watchdog_rejoin(acc_name, srv)
-                        finally:
-                            # Remove from launching set when done (success or failure)
-                            currently_launching.discard(acc_name)
-
-                    # Launch accounts with configurable stagger to prevent race conditions
-                    stagger_delay = self.settings.get("launchStagger", 5)
-                    for acc_name in accounts_to_relaunch:
-                        currently_launching.add(acc_name)  # Mark as launching
-                        t = threading.Thread(target=relaunch_one, args=(acc_name,), daemon=True)
-                        t.start()
-                        time.sleep(stagger_delay)  # Configurable stagger between launches
+                # Relaunch offline accounts sequentially
+                for acc_name in accounts_to_relaunch:
+                    # Double-check account isn't already running before launching
+                    running, pid, _ = manager.get_instance_status(acc_name, require_heartbeat=False)
+                    if running and pid:
+                        self.log(f"⚠️ {acc_name} already running (PID {pid}), skipping relaunch")
+                        continue
+                    currently_launching.add(acc_name)
+                    self._watchdog_rejoin(acc_name, srv)
+                    currently_launching.discard(acc_name)
 
                 self.auto_restart_job = self.root.after(interval_s * 1000, check)
             self.auto_restart_job = self.root.after(interval_s * 1000, check)
