@@ -1193,17 +1193,34 @@ function Bosses.startFarmLoop()
                     local success = Bosses.teleportAndWait(target.world, target.coords)
                     if success then
                         task.wait(2)
-                        -- Re-check server part health (may have died while traveling)
-                        local health = 0
-                        pcall(function()
-                            if target.serverPart and target.serverPart.Parent then
-                                health = target.serverPart:GetAttribute("Health") or 0
+
+                        -- Verify boss actually exists locally (client-side model check)
+                        local localTargets = Bosses.buildTargetList()
+                        local foundLocally = false
+                        for _, lt in ipairs(localTargets) do
+                            if lt.world == target.world and lt.type == target.type then
+                                foundLocally = true
+                                break
                             end
-                        end)
-                        if health > 0 then
-                            farmTarget(target)
+                        end
+
+                        if not foundLocally then
+                            log("W" .. target.world .. " " .. target.type .. " not found locally (server data stale)")
+                            task.wait(1)
+                            -- Continue to next target instead of farming nothing
                         else
-                            log("W" .. target.world .. " " .. target.type .. " died before arrival")
+                            -- Re-check server part health (may have died while traveling)
+                            local health = 0
+                            pcall(function()
+                                if target.serverPart and target.serverPart.Parent then
+                                    health = target.serverPart:GetAttribute("Health") or 0
+                                end
+                            end)
+                            if health > 0 then
+                                farmTarget(target)
+                            else
+                                log("W" .. target.world .. " " .. target.type .. " died before arrival")
+                            end
                         end
                     else
                         log("TP to W" .. target.world .. " failed")
