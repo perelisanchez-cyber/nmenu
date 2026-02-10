@@ -99,17 +99,33 @@ local function rollTrait(uuid)
         count = 1
     }
 
-    local Bridge = getBridge()
+    print("[Generals] rollTrait called with UUID:", uuid)
+    print("[Generals] Payload:", game:GetService("HttpService"):JSONEncode(payload))
+
+    -- Always use direct ReplicatedStorage.Bridge access
+    local RS = game:GetService("ReplicatedStorage")
+    local Bridge = RS:WaitForChild("Bridge", 5)
+
     if Bridge then
-        Bridge:FireServer("Traits", "RollGeneralTrait", payload)
-    else
-        -- Fallback: directly access ReplicatedStorage.Bridge
-        local RS = game:GetService("ReplicatedStorage")
-        local directBridge = RS:FindFirstChild("Bridge")
-        if directBridge then
-            directBridge:FireServer("Traits", "RollGeneralTrait", payload)
+        print("[Generals] Bridge found:", tostring(Bridge))
+        print("[Generals] Firing: Traits, RollGeneralTrait, payload...")
+
+        local success, err = pcall(function()
+            Bridge:FireServer("Traits", "RollGeneralTrait", payload)
+        end)
+
+        if success then
+            print("[Generals] FireServer call succeeded!")
         else
-            warn("[Generals] Bridge not found! Cannot roll traits.")
+            warn("[Generals] FireServer FAILED:", tostring(err))
+        end
+    else
+        warn("[Generals] Bridge NOT FOUND in ReplicatedStorage!")
+
+        -- List what's in ReplicatedStorage for debugging
+        print("[Generals] ReplicatedStorage children:")
+        for _, child in ipairs(RS:GetChildren()) do
+            print("  -", child.Name, "(" .. child.ClassName .. ")")
         end
     end
 end
