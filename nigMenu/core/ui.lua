@@ -518,7 +518,6 @@ function UI.createMainWindow()
         { 'Items',    '🎒' },
         { 'Merger',   '⭐' },
         { 'Bosses',   '💀' },
-        { 'ServerHopper', '🔄' },
         { 'Utils',    '🔧' },
         { 'Config',   '⚙' },
         { 'Changelog', '📝' }
