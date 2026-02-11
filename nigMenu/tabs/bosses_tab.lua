@@ -93,7 +93,7 @@ local function startStatusLoop()
             if bosses then
                 local T = Config.Theme
                 local now = nil
-                pcall(function() now = os.time() end)
+                pcall(function() now = workspace:GetServerTimeNow() end)
                 
                 -- Track the soonest upcoming boss/angel for the top card
                 local nextBossTime = nil
