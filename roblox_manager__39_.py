@@ -2944,13 +2944,17 @@ class RobloxManagerApp:
             btns = tk.Frame(top, bg=Theme.bg_card)
             btns.pack(side="right")
             self._btn(btns, "\U0001F5D1", lambda k=key: self._do_remove_server(k), color="#6b2020", small=True).pack(side="left", padx=2)
+            self._btn(btns, "\u270F Edit", lambda k=key: self._do_edit_server(k), color=Theme.blue_dim, small=True).pack(side="left", padx=2)
             self._btn(btns, "\u23F9 Shutdown", lambda k=key: self._do_shutdown(k), small=True).pack(side="left", padx=2)
             self._btn(btns, "\u25B6 Launch", lambda k=key: self._do_srv_launch(k), color=Theme.green_dim, small=True).pack(side="left", padx=2)
 
             # Info line
             pid_str = srv.get("place_id") or PLACE_ID
             lc = srv.get("link_code", "")
+            owner = srv.get("owner", "")
             info = f"Place: {pid_str}  |  LinkCode: {lc[:20]}..." if len(lc) > 20 else f"Place: {pid_str}  |  LinkCode: {lc or '(none)'}"
+            if owner:
+                info += f"  |  Owner: {owner}"
             tk.Label(c, text=info, font=("Consolas", 8), bg=Theme.bg_card, fg=Theme.text_dim).pack(anchor="w", pady=(4, 0))
 
             if manager.accounts:
@@ -3052,6 +3056,85 @@ class RobloxManagerApp:
             remove_server(key)
             self._refresh_servers()
             self.log(f"Removed server: {name}", "warn")
+
+    def _do_edit_server(self, key):
+        """Dialog to edit server settings (owner, server_id, etc)."""
+        srv = SERVERS.get(key)
+        if not srv:
+            return
+
+        dlg = tk.Toplevel(self.root)
+        dlg.title(f"Edit Server: {srv['name']}")
+        dlg.configure(bg=Theme.bg)
+        dlg.geometry("400x280")
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        pad = {"padx": 12, "pady": (8, 0)}
+
+        tk.Label(dlg, text="Server Name:", font=("Consolas", 10), bg=Theme.bg, fg=Theme.text).pack(anchor="w", **pad)
+        name_var = tk.StringVar(value=srv.get("name", ""))
+        tk.Entry(dlg, textvariable=name_var, font=("Consolas", 10), bg=Theme.bg_card, fg=Theme.text,
+                 insertbackground=Theme.text, relief="flat", bd=0).pack(fill="x", padx=12, pady=(2, 0), ipady=4)
+
+        tk.Label(dlg, text="Owner Account (for shutdown requests):", font=("Consolas", 10), bg=Theme.bg, fg=Theme.text).pack(anchor="w", **pad)
+        tk.Label(dlg, text="Leave empty to use any available account", font=("Consolas", 8), bg=Theme.bg, fg=Theme.text_dim).pack(anchor="w", padx=12)
+
+        # Dropdown for owner selection
+        owner_var = tk.StringVar(value=srv.get("owner", ""))
+        account_names = ["(none)"] + list(manager.accounts.keys())
+        owner_menu = ttk.Combobox(dlg, textvariable=owner_var, values=account_names, state="readonly",
+                                   font=("Consolas", 10))
+        owner_menu.pack(fill="x", padx=12, pady=(2, 0), ipady=2)
+        if srv.get("owner") in manager.accounts:
+            owner_menu.set(srv.get("owner"))
+        else:
+            owner_menu.set("(none)")
+
+        tk.Label(dlg, text="Server ID (for shutdown if not owner):", font=("Consolas", 10), bg=Theme.bg, fg=Theme.text).pack(anchor="w", **pad)
+        sid_var = tk.StringVar(value=str(srv.get("server_id", "")))
+        tk.Entry(dlg, textvariable=sid_var, font=("Consolas", 10), bg=Theme.bg_card, fg=Theme.text,
+                 insertbackground=Theme.text, relief="flat", bd=0).pack(fill="x", padx=12, pady=(2, 0), ipady=4)
+
+        status = tk.Label(dlg, text="", font=("Consolas", 9), bg=Theme.bg, fg=Theme.accent)
+        status.pack(anchor="w", padx=12, pady=(8, 0))
+
+        def do_save():
+            new_name = name_var.get().strip()
+            owner_val = owner_var.get().strip()
+            sid_text = sid_var.get().strip()
+
+            if not new_name:
+                status.config(text="Server name cannot be empty", fg="#ff4444")
+                return
+
+            # Update server data
+            srv["name"] = new_name
+
+            # Set or clear owner
+            if owner_val and owner_val != "(none)":
+                srv["owner"] = owner_val
+            elif "owner" in srv:
+                del srv["owner"]
+
+            # Set or clear server_id
+            if sid_text:
+                try:
+                    srv["server_id"] = int(sid_text)
+                except ValueError:
+                    status.config(text="Server ID must be a number", fg="#ff4444")
+                    return
+            elif "server_id" in srv:
+                del srv["server_id"]
+
+            save_servers()
+            status.config(text="Saved!", fg=Theme.green)
+            self.root.after(500, lambda: [dlg.destroy(), self._refresh_servers()])
+
+        btn_frame = tk.Frame(dlg, bg=Theme.bg)
+        btn_frame.pack(fill="x", padx=12, pady=(12, 12))
+        self._btn(btn_frame, "Save", do_save, color=Theme.green_dim).pack(side="right")
+        self._btn(btn_frame, "Cancel", dlg.destroy).pack(side="right", padx=(0, 8))
 
     def _do_shutdown(self, key):
         self.log(f"Shutting down {key}...", "warn")
