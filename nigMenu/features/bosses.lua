@@ -1532,6 +1532,7 @@ function Bosses.startFarmLoop()
     local function farmTarget(target)
         Bosses.currentTarget = target
         log("Farming W" .. target.world .. " " .. target.type .. ": " .. target.bossName)
+        local lastHpLog = 0
 
         while Bosses.farmEnabled and Config.State.running do
             -- Read health directly from server part attributes (ground truth)
@@ -1553,7 +1554,14 @@ function Bosses.startFarmLoop()
                 return true -- killed
             end
 
-            Bosses.status = "W" .. target.world .. " " .. target.type .. " [HP: " .. health .. "/" .. maxHealth .. "]"
+            local hpStr = "W" .. target.world .. " " .. target.type .. " [HP: " .. health .. "/" .. maxHealth .. "]"
+            Bosses.status = hpStr
+            -- Log HP every 5 seconds for debugging
+            local now = os.time()
+            if now - lastHpLog >= 5 then
+                log(hpStr)
+                lastHpLog = now
+            end
 
             -- Stay near target coords (with Z offset)
             pcall(function()
@@ -1656,20 +1664,31 @@ function Bosses.startFarmLoop()
                                 log("Server target not found, using server folder polling")
                                 Bosses.currentTarget = target
                                 log("Farming W" .. target.world .. " " .. target.type .. ": " .. target.bossName)
+                                local lastHpLog = 0
 
                                 -- Poll server folder for death detection (more reliable than local NPC check)
                                 while Bosses.farmEnabled and Config.State.running do
                                     local stillAlive = false
+                                    local currentHp = 0
                                     local serverCheck = Bosses.scanServerFolder()
                                     for _, sc in ipairs(serverCheck) do
                                         if sc.world == target.world and sc.type == target.type and sc.health and sc.health > 0 then
                                             stillAlive = true
+                                            currentHp = sc.health
                                             Bosses.status = "W" .. target.world .. " " .. target.type .. " [HP: " .. sc.health .. "]"
                                             break
                                         end
                                     end
 
+                                    -- Log HP every 5 seconds
+                                    local now = os.time()
+                                    if stillAlive and now - lastHpLog >= 5 then
+                                        log("W" .. target.world .. " " .. target.type .. " [HP: " .. currentHp .. "] (polling)")
+                                        lastHpLog = now
+                                    end
+
                                     if not stillAlive then
+                                        log("Server folder shows target dead, double-checking locally...")
                                         -- Double-check with local targets
                                         local localCheck = Bosses.buildTargetList()
                                         local localAlive = false
@@ -1685,6 +1704,8 @@ function Bosses.startFarmLoop()
                                             log("W" .. target.world .. " " .. target.type .. " DEAD! (kill #" .. Bosses.kills .. ")")
                                             Bosses.status = target.type .. " dead! (" .. Bosses.kills .. " kills)"
                                             break
+                                        else
+                                            log("Local target still alive, continuing...")
                                         end
                                     end
 
