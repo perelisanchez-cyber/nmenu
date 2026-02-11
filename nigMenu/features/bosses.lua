@@ -1003,6 +1003,70 @@ local function formatTimeRemaining(seconds)
     end
 end
 
+-- Cached WorldBossData
+local cachedWorldBossData = nil
+
+local function getWorldBossData()
+    if cachedWorldBossData then return cachedWorldBossData end
+    pcall(function()
+        cachedWorldBossData = require(game:GetService("ReplicatedStorage").SharedModules.WorldBossData)
+    end)
+    return cachedWorldBossData
+end
+
+-- Get spawn times for a specific world using the correct formula
+-- Returns: bossInfo, angelInfo (each with isActive, startTime, timeRemaining)
+function Bosses.getWorldSpawnTimes(worldNum)
+    local data = Bosses.Data[worldNum]
+    if not data then return nil, nil end
+
+    local WorldBossData = getWorldBossData()
+    if not WorldBossData or not WorldBossData.BossConfigs then return nil, nil end
+
+    local now = workspace:GetServerTimeNow()
+
+    -- Get boss config name from event name (e.g., "RainHard_BossEvent" -> "RainHard")
+    local bossConfigName = data.bossEvent:gsub("_BossEvent", "")
+    local angelConfigName = "BossAngel_" .. worldNum
+
+    local bossInfo = nil
+    local angelInfo = nil
+
+    -- Calculate boss spawn time
+    local bossConfig = WorldBossData.BossConfigs[bossConfigName]
+    if bossConfig then
+        local spawnTime, despawnTime = getNextSpawn(bossConfig)
+        local timeUntilSpawn = spawnTime - now
+        local timeUntilDespawn = despawnTime - now
+        local isActive = timeUntilSpawn <= 0 and timeUntilDespawn > 0
+
+        bossInfo = {
+            isActive = isActive,
+            startTime = spawnTime,
+            endTime = despawnTime,
+            timeRemaining = isActive and timeUntilDespawn or timeUntilSpawn
+        }
+    end
+
+    -- Calculate angel spawn time
+    local angelConfig = WorldBossData.BossConfigs[angelConfigName]
+    if angelConfig then
+        local spawnTime, despawnTime = getNextSpawn(angelConfig)
+        local timeUntilSpawn = spawnTime - now
+        local timeUntilDespawn = despawnTime - now
+        local isActive = timeUntilSpawn <= 0 and timeUntilDespawn > 0
+
+        angelInfo = {
+            isActive = isActive,
+            startTime = spawnTime,
+            endTime = despawnTime,
+            timeRemaining = isActive and timeUntilDespawn or timeUntilSpawn
+        }
+    end
+
+    return bossInfo, angelInfo
+end
+
 function Bosses.debugBossSpawnTimes()
     --[[
         Calculate ALL boss spawn times using WorldBossData.BossConfigs.

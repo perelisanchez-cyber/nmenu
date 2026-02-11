@@ -88,13 +88,12 @@ local function startStatusLoop()
             end
             
             -- ============================================================
-            -- SPAWN TIMERS CARD + PER-WORLD TIMER UPDATES (event system)
+            -- SPAWN TIMERS CARD + PER-WORLD TIMER UPDATES (correct formula)
+            -- Uses BossConfigs with UTC+3 timezone offset
             -- ============================================================
             if bosses then
                 local T = Config.Theme
-                local now = nil
-                pcall(function() now = workspace:GetServerTimeNow() end)
-                
+
                 -- Track the soonest upcoming boss/angel for the top card
                 local nextBossTime = nil
                 local nextBossName = nil
@@ -102,63 +101,59 @@ local function startStatusLoop()
                 local nextAngelTime = nil
                 local nextAngelName = nil
                 local activeAngelName = nil
-                
+
                 for worldNum, lbl in pairs(worldTimerLabels) do
                     if not lbl or not lbl.Parent then continue end
-                    
+
                     pcall(function()
-                        local bossActive, bossInfo = bosses.isBossActive(worldNum)
-                        local angelActive, angelInfo = bosses.isAngelActive(worldNum)
+                        -- Use correct formula from BossConfigs
+                        local bossInfo, angelInfo = bosses.getWorldSpawnTimes(worldNum)
                         local data = bosses.Data[worldNum]
                         local wName = data and data.spawn or ("W" .. worldNum)
-                        
+
                         local bStr = "--:--"
                         local aStr = "--:--"
-                        
-                        -- Boss timer
-                        if bossActive == true then
-                            bStr = "ALIVE"
-                            if not activeBossName then
-                                activeBossName = wName
-                            end
-                        elseif bossInfo and bossInfo.startTime and now then
-                            local remaining = bossInfo.startTime - now
-                            if remaining > 0 then
-                                bStr = bosses.formatTime(remaining)
-                                if not nextBossTime or remaining < nextBossTime then
-                                    nextBossTime = remaining
+                        local bossActive = false
+                        local angelActive = false
+
+                        -- Boss timer (using correct formula)
+                        if bossInfo then
+                            if bossInfo.isActive then
+                                bStr = "ALIVE"
+                                bossActive = true
+                                if not activeBossName then
+                                    activeBossName = wName
+                                end
+                            elseif bossInfo.timeRemaining and bossInfo.timeRemaining > 0 then
+                                bStr = bosses.formatTime(bossInfo.timeRemaining)
+                                if not nextBossTime or bossInfo.timeRemaining < nextBossTime then
+                                    nextBossTime = bossInfo.timeRemaining
                                     nextBossName = wName
                                 end
-                            else
-                                bStr = "ALIVE"
-                                if not activeBossName then activeBossName = wName end
                             end
                         end
-                        
-                        -- Angel timer
-                        if angelActive == true then
-                            aStr = "ALIVE"
-                            if not activeAngelName then
-                                activeAngelName = wName
-                            end
-                        elseif angelInfo and angelInfo.startTime and now then
-                            local remaining = angelInfo.startTime - now
-                            if remaining > 0 then
-                                aStr = bosses.formatTime(remaining)
-                                if not nextAngelTime or remaining < nextAngelTime then
-                                    nextAngelTime = remaining
+
+                        -- Angel timer (using correct formula)
+                        if angelInfo then
+                            if angelInfo.isActive then
+                                aStr = "ALIVE"
+                                angelActive = true
+                                if not activeAngelName then
+                                    activeAngelName = wName
+                                end
+                            elseif angelInfo.timeRemaining and angelInfo.timeRemaining > 0 then
+                                aStr = bosses.formatTime(angelInfo.timeRemaining)
+                                if not nextAngelTime or angelInfo.timeRemaining < nextAngelTime then
+                                    nextAngelTime = angelInfo.timeRemaining
                                     nextAngelName = wName
                                 end
-                            else
-                                aStr = "ALIVE"
-                                if not activeAngelName then activeAngelName = wName end
                             end
                         end
-                        
+
                         lbl.Text = "\xF0\x9F\x92\x80 " .. bStr .. "  \xF0\x9F\x91\xBC " .. aStr
-                        
+
                         -- Green if either is alive, muted otherwise
-                        if bossActive == true or angelActive == true then
+                        if bossActive or angelActive then
                             lbl.TextColor3 = Color3.fromRGB(80, 255, 80)
                         else
                             lbl.TextColor3 = Color3.fromRGB(130, 130, 140)
