@@ -342,7 +342,7 @@ def load_ui_settings():
     return {}
 
 
-def add_server(name, link_code, place_id=None, server_id=None):
+def add_server(name, link_code, place_id=None, server_id=None, owner=None):
     """Add a new private server.
 
     Args:
@@ -350,6 +350,7 @@ def add_server(name, link_code, place_id=None, server_id=None):
         link_code: The privateServerLinkCode from the URL
         place_id: Optional place ID (defaults to PLACE_ID)
         server_id: Optional numeric privateServerId/vipServerId for shutdown (if not owned)
+        owner: Optional account name that owns this server (used for shutdown requests)
     """
     key = name.lower().replace(" ", "_")
     SERVERS[key] = {
@@ -359,6 +360,8 @@ def add_server(name, link_code, place_id=None, server_id=None):
     }
     if server_id:
         SERVERS[key]["server_id"] = server_id
+    if owner:
+        SERVERS[key]["owner"] = owner
     save_servers()
     return key
 
@@ -1636,15 +1639,25 @@ class AccountManager:
         """Shutdown a private server. Matches the working boss_server.py approach:
         POST to matchmaking shutdown with placeId + privateServerId (numeric).
         gameId (jobId) is optional — sent if available from executor.
-        If 404, re-resolves privateServerId from API and retries once."""
-        if not account_name:
-            account_name = next(iter(self.accounts), None)
-        cookie = self.get_cookie(account_name)
-        if not cookie:
-            return {"error": f"No account '{account_name}' found"}
+        If 404, re-resolves privateServerId from API and retries once.
+
+        If the server has an 'owner' configured, use that account's cookie instead
+        of trying random accounts (only the owner can shutdown their server)."""
         if server_key not in SERVERS:
             return {"error": f"Unknown server: {server_key}"}
         server = SERVERS[server_key]
+
+        # Use owner account if specified, otherwise fall back to provided account or first account
+        owner = server.get("owner")
+        if owner and owner in self.accounts:
+            account_name = owner
+            print(f"[SHUTDOWN] Using owner account: {owner}")
+        elif not account_name:
+            account_name = next(iter(self.accounts), None)
+
+        cookie = self.get_cookie(account_name)
+        if not cookie:
+            return {"error": f"No account '{account_name}' found"}
         srv_place_id = server.get("place_id") or PLACE_ID
 
         # Get numeric privateServerId — from cache or API
