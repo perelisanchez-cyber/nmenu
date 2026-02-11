@@ -1231,8 +1231,27 @@ class AccountManager:
             return None
 
     def get_cookie(self, name):
+        # Try exact match first
         acc = self.accounts.get(name)
-        return acc["cookie"] if acc else None
+        if acc:
+            return acc["cookie"]
+        # Fall back to case-insensitive match
+        name_lower = name.lower()
+        for acc_name, acc_data in self.accounts.items():
+            if acc_name.lower() == name_lower:
+                return acc_data["cookie"]
+        return None
+
+    def resolve_account_name(self, name):
+        """Resolve account name with case-insensitive matching.
+        Returns the actual stored name, or None if not found."""
+        if name in self.accounts:
+            return name
+        name_lower = name.lower()
+        for acc_name in self.accounts:
+            if acc_name.lower() == name_lower:
+                return acc_name
+        return None
 
     def get_auth_ticket(self, cookie):
         csrf = self._get_csrf(cookie)
@@ -1373,9 +1392,16 @@ class AccountManager:
         return candidates[0][1]
 
     def launch_instance(self, account_name, server_key=None, place_id=None):
+        # Resolve account name (case-insensitive)
+        resolved_name = self.resolve_account_name(account_name)
+        if not resolved_name:
+            available = list(self.accounts.keys())
+            return {"error": f"Account '{account_name}' not found. Available: {available}"}
+        account_name = resolved_name
+
         cookie = self.get_cookie(account_name)
         if not cookie:
-            return {"error": f"Account '{account_name}' not found"}
+            return {"error": f"Account '{account_name}' has no cookie"}
         ticket = self.get_auth_ticket(cookie)
         if not ticket:
             return {"error": "Failed to get auth ticket"}
