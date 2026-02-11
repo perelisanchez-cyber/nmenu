@@ -19,6 +19,16 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.28",
+        date = "2026-02-11",
+        entries = {
+            { type = "fixed", text = "Boss spawn timers now use correct BossConfigs formula with UTC+3 timezone offset" },
+            { type = "fixed", text = "Item reroller now supports letter rarities (D/C/B/A/S/SS/SSS) for Fruits" },
+            { type = "fixed", text = "Item reroller picks best available option when target not found (was hanging)" },
+            { type = "changed", text = "Items tab target options changed to S/SS/SSS (default: SS)" },
+        }
+    },
+    {
         version = "1.0.27",
         date = "2026-02-10",
         entries = {
