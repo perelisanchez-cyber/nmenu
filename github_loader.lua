@@ -96,7 +96,10 @@ print("[nigMenu] ============================================")
 print("[nigMenu] Loading from GitHub...")
 print("[nigMenu] ============================================")
 
-task.wait(3)
+-- Quick game-ready check (no fixed delay)
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
 
 _G.nigMenu = {}
 local NM = _G.nigMenu
@@ -121,18 +124,40 @@ if not NM.UI then error("[nigMenu] UI failed") end
 print("[nigMenu] ✓ UI")
 
 -- ============================================================================
--- FEATURES (nigMenu/features/)
+-- FEATURES (nigMenu/features/) - PARALLEL LOADING
 -- ============================================================================
 
 NM.Features = {}
 
-for _, name in ipairs({
+local featureNames = {
     "console", "raids", "autoroll", "generals", "swords",
     "splitter", "accessories", "merger", "utilities", "autobuy", "bosses"
-}) do
-    local m = fetch("features/" .. name .. ".lua")
-    if m then
-        NM.Features[name] = m
+}
+
+local featuresPending = #featureNames
+local featuresLoaded = {}
+
+print("[nigMenu] Loading " .. #featureNames .. " features in parallel...")
+
+for _, name in ipairs(featureNames) do
+    task.spawn(function()
+        local m = fetch("features/" .. name .. ".lua")
+        if m then
+            NM.Features[name] = m
+            featuresLoaded[name] = true
+        end
+        featuresPending = featuresPending - 1
+    end)
+end
+
+-- Wait for all features to complete
+while featuresPending > 0 do
+    task.wait(0.05)
+end
+
+-- Print results
+for _, name in ipairs(featureNames) do
+    if featuresLoaded[name] then
         print("[nigMenu] ✓ " .. name)
     else
         print("[nigMenu] ⚠ " .. name .. " (skipped)")
@@ -140,12 +165,12 @@ for _, name in ipairs({
 end
 
 -- ============================================================================
--- TABS (nigMenu/tabs/)
+-- TABS (nigMenu/tabs/) - PARALLEL LOADING
 -- ============================================================================
 
 NM.Tabs = {}
 
-for _, t in ipairs({
+local tabList = {
     { f = "auto_tab.lua",      n = "Auto" },
     { f = "upgrades_tab.lua",  n = "Upgrades" },
     { f = "generals_tab.lua",  n = "Generals" },
@@ -156,10 +181,32 @@ for _, t in ipairs({
     { f = "utils_tab.lua",     n = "Utils" },
     { f = "config_tab.lua",    n = "Config" },
     { f = "changelog_tab.lua", n = "Changelog" },
-}) do
-    local m = fetch("tabs/" .. t.f)
-    if m then
-        NM.Tabs[t.n] = m
+}
+
+local tabsPending = #tabList
+local tabsLoaded = {}
+
+print("[nigMenu] Loading " .. #tabList .. " tabs in parallel...")
+
+for _, t in ipairs(tabList) do
+    task.spawn(function()
+        local m = fetch("tabs/" .. t.f)
+        if m then
+            NM.Tabs[t.n] = m
+            tabsLoaded[t.n] = true
+        end
+        tabsPending = tabsPending - 1
+    end)
+end
+
+-- Wait for all tabs to complete
+while tabsPending > 0 do
+    task.wait(0.05)
+end
+
+-- Print results
+for _, t in ipairs(tabList) do
+    if tabsLoaded[t.n] then
         print("[nigMenu] ✓ " .. t.n .. " tab")
     else
         print("[nigMenu] ⚠ " .. t.n .. " tab (skipped)")
