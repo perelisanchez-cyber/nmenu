@@ -1154,6 +1154,27 @@ class AccountManager:
             return self.accounts[name].get("default_server", "")
         return ""
 
+    def set_priority(self, name, priority):
+        """Set the launch priority for an account (lower = launches first)."""
+        if name in self.accounts:
+            self.accounts[name]["priority"] = priority
+            self.save_data()
+            return True
+        return False
+
+    def get_priority(self, name):
+        """Get the launch priority for an account (default 100)."""
+        if name in self.accounts:
+            return self.accounts[name].get("priority", 100)
+        return 100
+
+    def get_accounts_by_priority(self, account_names=None):
+        """Return account names sorted by priority (lowest first).
+        If account_names is None, returns all accounts."""
+        if account_names is None:
+            account_names = list(self.accounts.keys())
+        return sorted(account_names, key=lambda n: self.get_priority(n))
+
     def save_window_layout(self, name):
         """Save the current window position/size for an account's Roblox window."""
         if not IS_WINDOWS:
@@ -2307,7 +2328,9 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                     # Clear all instance tracking to start fresh
                     manager.instances.clear()
 
-                # Relaunch all accounts (respecting per-account default server)
+                # Relaunch all accounts sorted by priority (lower = first)
+                relaunch_accounts = manager.get_accounts_by_priority(relaunch_accounts)
+                print(f"[RESTART] Launch order (by priority): {relaunch_accounts}")
                 for acc_name in relaunch_accounts:
                     acc_server = manager.get_default_server(acc_name) or server_key
                     result = manager.launch_instance(acc_name, acc_server)
@@ -2729,9 +2752,14 @@ class RobloxManagerApp:
                 new_sel[name] = tk.BooleanVar(value=False)
         self.acc_selection = new_sel
 
-        for name, acc in manager.accounts.items():
+        # Sort accounts by priority for display
+        sorted_accounts = manager.get_accounts_by_priority(list(manager.accounts.keys()))
+
+        for name in sorted_accounts:
+            acc = manager.accounts[name]
             running, pid, srv = manager.get_instance_status(name)
             default_srv = manager.get_default_server(name)
+            priority = manager.get_priority(name)
             c = self._card(self.acc_inner)
             c.pack(fill="x", pady=(0, 6), padx=(0, 12))
 
@@ -2744,7 +2772,9 @@ class RobloxManagerApp:
             left.pack(side="left", fill="x", expand=True)
 
             icon_col = Theme.green if running else Theme.text
-            tk.Label(left, text=f"{'🟢' if running else '👤'}  {name}", font=("Consolas", 11, "bold"),
+            # Show priority badge if not default
+            priority_badge = f"[#{priority}] " if priority != 100 else ""
+            tk.Label(left, text=f"{'🟢' if running else '👤'}  {priority_badge}{name}", font=("Consolas", 11, "bold"),
                      bg=Theme.bg_card, fg=icon_col).pack(anchor="w")
 
             det = f"{acc.get('username', '?')} \u00b7 {acc.get('display_name', '?')}"
@@ -2796,8 +2826,10 @@ class RobloxManagerApp:
             self.log("No accounts selected", "warn")
             return
 
+        # Sort by priority (lower = first)
+        selected = manager.get_accounts_by_priority(selected)
         total = len(selected)
-        self.log(f"Launching {total} account{'s' if total != 1 else ''} (5s between each)...")
+        self.log(f"Launching {total} account{'s' if total != 1 else ''} by priority (5s between each)...")
 
         def do_launches():
             for i, name in enumerate(selected):
@@ -2914,33 +2946,84 @@ class RobloxManagerApp:
         threading.Thread(target=do, daemon=True).start()
 
     def _edit_account(self, name):
-        """Show a dropdown menu to assign a default server to this account."""
-        menu = tk.Menu(self.root, tearoff=0, bg=Theme.bg_card, fg=Theme.text,
-                       activebackground=Theme.blue_dim, activeforeground=Theme.text,
-                       font=("Consolas", 10))
+        """Dialog to edit account settings (server, priority)."""
+        acc = manager.accounts.get(name)
+        if not acc:
+            return
 
-        current = manager.get_default_server(name)
+        dlg = tk.Toplevel(self.root)
+        dlg.title(f"Edit: {name}")
+        dlg.configure(bg=Theme.bg)
+        dlg.geometry("350x260")
+        dlg.transient(self.root)
+        dlg.grab_set()
 
-        # Public option
-        pub_label = "\u2714 Public Server" if not current else "  Public Server"
-        menu.add_command(label=pub_label, command=lambda: self._set_server(name, ""))
+        pad = {"padx": 12, "pady": (8, 0)}
 
-        menu.add_separator()
+        # Account info
+        tk.Label(dlg, text=f"{acc.get('username', '?')} ({acc.get('display_name', '?')})",
+                 font=("Consolas", 10, "bold"), bg=Theme.bg, fg=Theme.text).pack(anchor="w", **pad)
 
-        # Each private server
-        for key, srv in SERVERS.items():
-            check = "\u2714 " if current == key else "  "
-            label = f"{check}{srv['name']}"
-            menu.add_command(label=label, command=lambda k=key: self._set_server(name, k))
+        # Priority
+        tk.Label(dlg, text="Launch Priority (lower = first):", font=("Consolas", 10),
+                 bg=Theme.bg, fg=Theme.text).pack(anchor="w", **pad)
+        tk.Label(dlg, text="Use 1 for first, 2 for second, etc. Default is 100.",
+                 font=("Consolas", 8), bg=Theme.bg, fg=Theme.text_dim).pack(anchor="w", padx=12)
 
-        menu.add_separator()
-        menu.add_command(label="  Remove Account", command=lambda: self._remove_acc(name))
+        priority_var = tk.StringVar(value=str(manager.get_priority(name)))
+        priority_entry = tk.Entry(dlg, textvariable=priority_var, font=("Consolas", 10),
+                                   bg=Theme.bg_card, fg=Theme.text, insertbackground=Theme.text,
+                                   relief="flat", bd=0, width=10)
+        priority_entry.pack(anchor="w", padx=12, pady=(2, 0), ipady=4)
 
-        # Position the menu near the mouse
-        try:
-            menu.tk_popup(self.root.winfo_pointerx(), self.root.winfo_pointery())
-        finally:
-            menu.grab_release()
+        # Default server
+        tk.Label(dlg, text="Default Server:", font=("Consolas", 10),
+                 bg=Theme.bg, fg=Theme.text).pack(anchor="w", **pad)
+
+        current_srv = manager.get_default_server(name)
+        server_options = ["(Public)"] + [SERVERS[k]["name"] for k in SERVERS]
+        server_keys = [""] + list(SERVERS.keys())
+
+        server_var = tk.StringVar()
+        if current_srv and current_srv in SERVERS:
+            server_var.set(SERVERS[current_srv]["name"])
+        else:
+            server_var.set("(Public)")
+
+        server_menu = ttk.Combobox(dlg, textvariable=server_var, values=server_options,
+                                    state="readonly", font=("Consolas", 10))
+        server_menu.pack(anchor="w", padx=12, pady=(2, 0), ipady=2)
+
+        status = tk.Label(dlg, text="", font=("Consolas", 9), bg=Theme.bg, fg=Theme.accent)
+        status.pack(anchor="w", padx=12, pady=(8, 0))
+
+        def do_save():
+            # Save priority
+            try:
+                new_priority = int(priority_var.get().strip())
+                manager.set_priority(name, new_priority)
+            except ValueError:
+                status.config(text="Priority must be a number", fg="#ff4444")
+                return
+
+            # Save server
+            selected_name = server_var.get()
+            new_srv = ""
+            for i, opt in enumerate(server_options):
+                if opt == selected_name:
+                    new_srv = server_keys[i]
+                    break
+            manager.set_default_server(name, new_srv)
+
+            status.config(text="Saved!", fg=Theme.green)
+            self.root.after(500, lambda: [dlg.destroy(), self._refresh_accounts()])
+
+        btn_frame = tk.Frame(dlg, bg=Theme.bg)
+        btn_frame.pack(fill="x", padx=12, pady=(12, 12))
+        self._btn(btn_frame, "Save", do_save, color=Theme.green_dim).pack(side="right")
+        self._btn(btn_frame, "Cancel", dlg.destroy).pack(side="right", padx=(0, 8))
+        self._btn(btn_frame, "Remove", lambda: [dlg.destroy(), self._remove_acc(name)],
+                  color=Theme.red_dim).pack(side="left")
 
     def _set_server(self, name, server_key):
         """Assign a default server to an account."""
