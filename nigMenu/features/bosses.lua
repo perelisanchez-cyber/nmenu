@@ -969,24 +969,96 @@ function Bosses.scanServerFolder()
 end
 
 -- ============================================================================
--- DEBUG: VIEW ALL BOSS SPAWN TIMES
+-- DEBUG: VIEW ALL BOSS SPAWN TIMES (Self-calibrating from live data)
 -- ============================================================================
 
--- Timezone offset: Server uses UTC+3 (Moscow time)
-local TIMEZONE_OFFSET = 10800 -- 3 hours in seconds
+-- Cached WorldBossData
+local cachedWorldBossData = nil
 
--- Calculate next spawn and despawn times for a boss config
+local function getWorldBossData()
+    if cachedWorldBossData then return cachedWorldBossData end
+    pcall(function()
+        cachedWorldBossData = require(game:GetService("ReplicatedStorage").SharedModules.WorldBossData)
+    end)
+    return cachedWorldBossData
+end
+
+-- Calibrated offsets per cooldown value (different cooldowns may have different offsets)
+local calibratedOffsets = {}
+local isCalibrated = false
+
+-- Get the boss folder in workspace
+local function getBossFolder()
+    local folder = nil
+    pcall(function()
+        folder = workspace:WaitForChild("Server", 5):WaitForChild("Enemies", 5):WaitForChild("WorldBoss", 5)
+    end)
+    return folder
+end
+
+-- Self-calibrate by scanning live boss parts
+-- Each cooldown value may have a different offset
+local function calibrateOffsets()
+    local WorldBossData = getWorldBossData()
+    if not WorldBossData or not WorldBossData.BossConfigs then return false end
+
+    local bossFolder = getBossFolder()
+    if not bossFolder then return false end
+
+    local foundAny = false
+
+    pcall(function()
+        for _, mapFolder in ipairs(bossFolder:GetChildren()) do
+            for _, boss in ipairs(mapFolder:GetChildren()) do
+                if boss:IsA("BasePart") and boss:GetAttribute("spawnTime") then
+                    local config = WorldBossData.BossConfigs[boss.Name]
+                    if config and not calibratedOffsets[config.cooldown] then
+                        local actual = boss:GetAttribute("spawnTime")
+                        local anchor = config.startTime.hour * 3600 + config.startTime.min * 60
+                        local cd = config.cooldown
+                        calibratedOffsets[cd] = (actual - anchor) % cd
+                        foundAny = true
+                    end
+                end
+            end
+        end
+    end)
+
+    if foundAny then
+        isCalibrated = true
+    end
+
+    return foundAny
+end
+
+-- Calculate next spawn and despawn times using calibrated offset
 local function getNextSpawn(config)
     local now = workspace:GetServerTimeNow()
-    local anchor = config.startTime.hour * 3600 + config.startTime.min * 60 + TIMEZONE_OFFSET
+    local anchor = config.startTime.hour * 3600 + config.startTime.min * 60
     local cd = config.cooldown
     local dur = config.duration
-    local n = math.floor((now - anchor) / cd)
-    local spawnTime = anchor + n * cd
+
+    -- Get calibrated offset for this cooldown, or try to find one
+    local offset = calibratedOffsets[cd]
+    if not offset then
+        -- Try any available offset as fallback
+        for _, knownOff in pairs(calibratedOffsets) do
+            offset = knownOff
+            break
+        end
+        -- Last resort: assume offset 0 (may be inaccurate)
+        if not offset then offset = 0 end
+    end
+
+    local base = anchor + offset
+    local n = math.floor((now - base) / cd)
+    local spawnTime = base + n * cd
+
     -- If we're past the despawn time, advance to next cycle
     if now > spawnTime + dur then
         spawnTime = spawnTime + cd
     end
+
     return spawnTime, spawnTime + dur
 end
 
@@ -1003,17 +1075,6 @@ local function formatTimeRemaining(seconds)
     end
 end
 
--- Cached WorldBossData
-local cachedWorldBossData = nil
-
-local function getWorldBossData()
-    if cachedWorldBossData then return cachedWorldBossData end
-    pcall(function()
-        cachedWorldBossData = require(game:GetService("ReplicatedStorage").SharedModules.WorldBossData)
-    end)
-    return cachedWorldBossData
-end
-
 -- Get spawn times for a specific world using the correct formula
 -- Returns: bossInfo, angelInfo (each with isActive, startTime, timeRemaining)
 function Bosses.getWorldSpawnTimes(worldNum)
@@ -1022,6 +1083,11 @@ function Bosses.getWorldSpawnTimes(worldNum)
 
     local WorldBossData = getWorldBossData()
     if not WorldBossData or not WorldBossData.BossConfigs then return nil, nil end
+
+    -- Try to calibrate if not yet done
+    if not isCalibrated then
+        calibrateOffsets()
+    end
 
     local now = workspace:GetServerTimeNow()
 
@@ -1067,10 +1133,32 @@ function Bosses.getWorldSpawnTimes(worldNum)
     return bossInfo, angelInfo
 end
 
+-- Force recalibration (call when visiting a new map with bosses)
+function Bosses.recalibrateTimers()
+    calibratedOffsets = {}
+    isCalibrated = false
+    local success = calibrateOffsets()
+    if success then
+        print("[Bosses] Timer calibration successful")
+        for cd, off in pairs(calibratedOffsets) do
+            print(string.format("[Bosses] Cooldown %d -> offset %d", cd, off))
+        end
+    else
+        print("[Bosses] Timer calibration failed - no live boss parts found")
+    end
+    return success
+end
+
+-- Check if timers are calibrated
+function Bosses.isTimerCalibrated()
+    return isCalibrated
+end
+
+
 function Bosses.debugBossSpawnTimes()
     --[[
         Calculate ALL boss spawn times using WorldBossData.BossConfigs.
-        Uses the correct formula with UTC+3 timezone offset.
+        Uses self-calibrating offset from live boss data.
         Opens console and shows formatted output.
     ]]
     local NM = getNM()
@@ -1082,21 +1170,31 @@ function Bosses.debugBossSpawnTimes()
     if con then con.clear(); con.show() end
 
     -- Load WorldBossData
-    local WorldBossData
-    pcall(function()
-        WorldBossData = require(game:GetService("ReplicatedStorage").SharedModules.WorldBossData)
-    end)
+    local WorldBossData = getWorldBossData()
 
     if not WorldBossData or not WorldBossData.BossConfigs then
         log("ERROR: Cannot load WorldBossData.BossConfigs")
         return
     end
 
+    -- Try to calibrate if needed
+    if not isCalibrated then
+        calibrateOffsets()
+    end
+
     local now = workspace:GetServerTimeNow()
 
     log("====== BOSS SPAWN TIMES ======")
     log("Server Time: " .. string.format("%.1f", now))
-    log("Timezone: UTC+3 (offset: " .. TIMEZONE_OFFSET .. "s)")
+    if isCalibrated then
+        local parts = {}
+        for cd, off in pairs(calibratedOffsets) do
+            table.insert(parts, string.format("cd%d=%d", cd, off))
+        end
+        log("Calibrated: " .. table.concat(parts, ", "))
+    else
+        log("NOT CALIBRATED - timers may be inaccurate")
+    end
     log("")
 
     local allBosses = {}
@@ -1159,7 +1257,7 @@ function Bosses.debugBossSpawnTimes()
 
     log("")
     log(string.format("Summary: %d Active | %d Soon (<30m) | %d Later", activeCount, soonCount, laterCount))
-    log("Formula: anchor = h*3600 + m*60 + 10800, cycle = cooldown")
+    log("Formula: base = anchor + calibrated_offset, cycle = cooldown")
     log("====== END ======")
 
     -- Store for potential teleport use
