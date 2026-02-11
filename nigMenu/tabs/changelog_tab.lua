@@ -19,6 +19,14 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.31",
+        date = "2026-02-11",
+        entries = {
+            { type = "fixed", text = "Spam Hatch no longer causes C stack overflow crash" },
+            { type = "changed", text = "Added 100ms cooldown to Spam Hatch (was firing 180 times/sec)" },
+        }
+    },
+    {
         version = "1.0.30",
         date = "2026-02-11",
         entries = {
