@@ -1627,6 +1627,13 @@ function Bosses.startFarmLoop()
             -- ============================================================
             if Bosses.kills > 0 and Bosses.autoRestartOnKill then
                 local remaining = Bosses.scanServerFolder()
+                log("[RESTART CHECK] kills=" .. Bosses.kills .. ", remaining=" .. #remaining)
+                if #remaining > 0 then
+                    -- Log what's still alive
+                    for _, r in ipairs(remaining) do
+                        log("[RESTART CHECK] Still alive: W" .. r.world .. " " .. r.type .. " HP=" .. (r.health or "?"))
+                    end
+                end
                 if #remaining == 0 then
                     log("All targets dead (kills=" .. Bosses.kills .. ") - RESTARTING SERVER!")
                     Bosses.status = "All dead -> Restarting server..."
