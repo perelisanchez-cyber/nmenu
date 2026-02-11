@@ -290,21 +290,25 @@ local function setupSpamHatch()
     task.spawn(function()
         local MS = Utils.getMetaService()
         if not MS then return end
-        
+
+        local lastHatch = 0
+        local HATCH_COOLDOWN = 0.1  -- 100ms between hatches (10 per second max)
+
         RS.Heartbeat:Connect(function()
-            if Config.Toggles.utilityToggles.SpamHatch 
-                and MS.Cache.Star 
-                and not MS.LocalPlayer:GetAttribute('StarOpening') 
-            then
-                pcall(function()
-                    for i = 1, 3 do
-                        MS.Bridge:Fire('Stars', 'Roll', {
-                            Map = MS.Cache.Star.Parent.Parent.Name,
-                            Type = 'Multi'
-                        })
-                    end
-                end)
-            end
+            if not Config.Toggles.utilityToggles.SpamHatch then return end
+            if not MS.Cache.Star then return end
+            if MS.LocalPlayer:GetAttribute('StarOpening') then return end
+
+            local now = tick()
+            if now - lastHatch < HATCH_COOLDOWN then return end
+            lastHatch = now
+
+            pcall(function()
+                MS.Bridge:Fire('Stars', 'Roll', {
+                    Map = MS.Cache.Star.Parent.Parent.Name,
+                    Type = 'Multi'
+                })
+            end)
         end)
     end)
 end
