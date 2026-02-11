@@ -243,7 +243,8 @@ if NM.Features.bosses and NM.Features.bosses.startHeartbeat then
     print("[nigMenu] ✓ Heartbeat started")
 end
 
+local version = NM.Config and NM.Config.Constants and NM.Config.Constants.VERSION or "?"
 print("[nigMenu] ============================================")
-print("[nigMenu] nigMenu LOADED (GitHub)")
+print("[nigMenu] nigMenu v" .. version .. " LOADED (GitHub)")
 print("[nigMenu] Toggle: " .. (NM.Config.State.menuKeybind and NM.Config.State.menuKeybind.Name or "RightControl"))
 print("[nigMenu] ============================================")
