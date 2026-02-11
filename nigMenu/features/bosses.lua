@@ -1629,54 +1629,64 @@ function Bosses.startFarmLoop()
                             log("W" .. target.world .. " " .. target.type .. " not found after 15s (already dead, marking stale)")
                             Bosses.staleTargets[staleKey] = now + 60  -- 60 second cooldown for dead bosses
                         else
-                            -- Found the boss alive! Check server folder for health tracking
-                            local serverTargets = Bosses.scanServerFolder()
+                            -- Found the boss alive! Wait a moment for server folder to sync
+                            task.wait(1)
+
+                            -- Try to get server target for accurate health tracking (retry a few times)
                             local serverTarget = nil
-                            for _, st in ipairs(serverTargets) do
-                                if st.world == target.world and st.type == target.type then
-                                    serverTarget = st
-                                    break
+                            for attempt = 1, 3 do
+                                local serverTargets = Bosses.scanServerFolder()
+                                for _, st in ipairs(serverTargets) do
+                                    if st.world == target.world and st.type == target.type then
+                                        serverTarget = st
+                                        break
+                                    end
                                 end
+                                if serverTarget then break end
+                                task.wait(1)
                             end
 
                             if serverTarget and serverTarget.health and serverTarget.health > 0 then
-                                -- Use server target for accurate health tracking
+                                -- Use server target for accurate health tracking (preferred)
+                                log("Using server folder for health tracking (HP: " .. serverTarget.health .. ")")
                                 farmTarget(serverTarget)
                                 Bosses.staleTargets[staleKey] = nil
-                            elseif localTarget then
-                                -- Fallback: farm using local target (less accurate health)
-                                log("Using local target (no server health data)")
-                                -- Create a pseudo-target for farming
-                                local pseudoTarget = {
-                                    world = target.world,
-                                    type = target.type,
-                                    bossName = target.bossName,
-                                    coords = target.coords,
-                                    spawn = target.spawn,
-                                }
-                                -- For pseudo-targets, we need different death detection
-                                Bosses.currentTarget = pseudoTarget
-                                log("Farming W" .. pseudoTarget.world .. " " .. pseudoTarget.type .. ": " .. pseudoTarget.bossName)
+                            else
+                                -- Fallback: farm using server folder polling
+                                log("Server target not found, using server folder polling")
+                                Bosses.currentTarget = target
+                                log("Farming W" .. target.world .. " " .. target.type .. ": " .. target.bossName)
 
-                                -- Simple farm loop checking local targets
+                                -- Poll server folder for death detection (more reliable than local NPC check)
                                 while Bosses.farmEnabled and Config.State.running do
                                     local stillAlive = false
-                                    local currentTargets = Bosses.buildTargetList()
-                                    for _, ct in ipairs(currentTargets) do
-                                        if ct.world == target.world and ct.type == target.type then
+                                    local serverCheck = Bosses.scanServerFolder()
+                                    for _, sc in ipairs(serverCheck) do
+                                        if sc.world == target.world and sc.type == target.type and sc.health and sc.health > 0 then
                                             stillAlive = true
+                                            Bosses.status = "W" .. target.world .. " " .. target.type .. " [HP: " .. sc.health .. "]"
                                             break
                                         end
                                     end
 
                                     if not stillAlive then
-                                        Bosses.kills = Bosses.kills + 1
-                                        log("W" .. target.world .. " " .. target.type .. " DEAD! (kill #" .. Bosses.kills .. ")")
-                                        Bosses.status = target.type .. " dead! (" .. Bosses.kills .. " kills)"
-                                        break
-                                    end
+                                        -- Double-check with local targets
+                                        local localCheck = Bosses.buildTargetList()
+                                        local localAlive = false
+                                        for _, lc in ipairs(localCheck) do
+                                            if lc.world == target.world and lc.type == target.type then
+                                                localAlive = true
+                                                break
+                                            end
+                                        end
 
-                                    Bosses.status = "W" .. target.world .. " " .. target.type .. " [farming...]"
+                                        if not localAlive then
+                                            Bosses.kills = Bosses.kills + 1
+                                            log("W" .. target.world .. " " .. target.type .. " DEAD! (kill #" .. Bosses.kills .. ")")
+                                            Bosses.status = target.type .. " dead! (" .. Bosses.kills .. " kills)"
+                                            break
+                                        end
+                                    end
 
                                     -- Stay near target coords
                                     pcall(function()
@@ -1691,8 +1701,6 @@ function Bosses.startFarmLoop()
                                     task.wait(1)
                                 end
                                 Bosses.staleTargets[staleKey] = nil
-                            else
-                                log("W" .. target.world .. " " .. target.type .. " died before farming could start")
                             end
                         end
                     else
@@ -1704,14 +1712,13 @@ function Bosses.startFarmLoop()
                 -- No bosses active according to schedule
                 Bosses.status = "No active spawns, waiting..."
                 log("Schedule: no active spawns")
-                task.wait(10)  -- Check again in 10 seconds
-                continue
+                -- Don't continue yet - still need to check restart below
             end
 
             if not Bosses.farmEnabled or not Config.State.running then break end
 
             -- ============================================================
-            -- RESTART CHECK
+            -- RESTART CHECK (runs after each farm cycle, even if no scheduled targets)
             -- Uses scanServerFolder() only (ground truth from server attributes)
             -- getEventTargets() is not reliable for death detection (events lag)
             -- ============================================================
