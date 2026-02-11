@@ -22,8 +22,10 @@ local changelog = {
         version = "1.0.31",
         date = "2026-02-11",
         entries = {
-            { type = "fixed", text = "Spam Hatch no longer causes C stack overflow crash" },
-            { type = "changed", text = "Added 100ms cooldown to Spam Hatch (was firing 180 times/sec)" },
+            { type = "fixed", text = "Auto Roll no longer causes C stack overflow (was creating separate loop per map)" },
+            { type = "fixed", text = "Auto Attacks changed from Heartbeat to controlled loop (prevents stack overflow)" },
+            { type = "fixed", text = "Spam Hatch changed from Heartbeat to controlled loop with 3 fires per 50ms" },
+            { type = "changed", text = "Faster Egg Opening simplified to directly replace task.wait during calls" },
         }
     },
     {
