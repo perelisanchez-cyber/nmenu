@@ -219,18 +219,20 @@ local function setupAutoAttacks()
     task.spawn(function()
         local MS = Utils.getMetaService()
         if not MS then return end
-        
-        RS.Heartbeat:Connect(function()
-            if Config.Toggles.utilityToggles.AutoAttacks 
-                and MS.Cache 
-                and MS.Cache.ProximityEnemy 
-                and MS.Cache.ProximityEnemy.Enemy 
+
+        -- Use a loop instead of Heartbeat to avoid stack overflow
+        while Config.State.running do
+            if Config.Toggles.utilityToggles.AutoAttacks
+                and MS.Cache
+                and MS.Cache.ProximityEnemy
+                and MS.Cache.ProximityEnemy.Enemy
             then
                 pcall(function()
                     MS.Bridge:Fire('Attack', 'Click', MS.Cache.ProximityEnemy)
                 end)
             end
-        end)
+            task.wait(0.05)  -- 50ms = 20 attacks per second max
+        end
     end)
 end
 
@@ -291,25 +293,21 @@ local function setupSpamHatch()
         local MS = Utils.getMetaService()
         if not MS then return end
 
-        local lastHatch = 0
-        local HATCH_COOLDOWN = 0.1  -- 100ms between hatches (10 per second max)
-
-        RS.Heartbeat:Connect(function()
-            if not Config.Toggles.utilityToggles.SpamHatch then return end
-            if not MS.Cache.Star then return end
-            if MS.LocalPlayer:GetAttribute('StarOpening') then return end
-
-            local now = tick()
-            if now - lastHatch < HATCH_COOLDOWN then return end
-            lastHatch = now
-
-            pcall(function()
-                MS.Bridge:Fire('Stars', 'Roll', {
-                    Map = MS.Cache.Star.Parent.Parent.Name,
-                    Type = 'Multi'
-                })
-            end)
-        end)
+        -- Use a loop instead of Heartbeat to avoid stack overflow
+        while Config.State.running do
+            if Config.Toggles.utilityToggles.SpamHatch
+                and MS.Cache.Star
+                and not MS.LocalPlayer:GetAttribute('StarOpening')
+            then
+                pcall(function()
+                    MS.Bridge:Fire('Stars', 'Roll', {
+                        Map = MS.Cache.Star.Parent.Parent.Name,
+                        Type = 'Multi'
+                    })
+                end)
+            end
+            task.wait(0.15)  -- 150ms between hatches
+        end
     end)
 end
 
