@@ -1391,13 +1391,34 @@ class AccountManager:
         candidates.sort(reverse=True)
         return candidates[0][1]
 
-    def launch_instance(self, account_name, server_key=None, place_id=None):
+    def launch_instance(self, account_name, server_key=None, place_id=None, force=False):
         # Resolve account name (case-insensitive)
         resolved_name = self.resolve_account_name(account_name)
         if not resolved_name:
             available = list(self.accounts.keys())
             return {"error": f"Account '{account_name}' not found. Available: {available}"}
         account_name = resolved_name
+
+        # ── DUPLICATE PREVENTION ──
+        # Check if this account already has a running instance
+        if not force:
+            running, existing_pid, existing_server = self.get_instance_status(account_name, require_heartbeat=False)
+            if running and existing_pid:
+                # Verify process is actually alive
+                try:
+                    p = psutil.Process(existing_pid)
+                    if p.is_running() and "RobloxPlayerBeta" in (p.name() or ""):
+                        print(f"[LAUNCH] BLOCKED: {account_name} already running (PID {existing_pid}, server={existing_server})")
+                        return {
+                            "error": f"Already running",
+                            "existing_pid": existing_pid,
+                            "existing_server": existing_server,
+                            "hint": "Use force=True to launch anyway (will cause logout)"
+                        }
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    # Process is gone, clear the stale instance
+                    print(f"[LAUNCH] Clearing stale instance for {account_name} (PID {existing_pid} no longer exists)")
+                    self.instances.pop(account_name, None)
 
         cookie = self.get_cookie(account_name)
         if not cookie:
@@ -2312,9 +2333,12 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                                 p = psutil.Process(inst["pid"])
                                 if p.is_running():
                                     p.kill()
+                                    print(f"[VERIFY] Killed stale process PID {inst['pid']} for {acc_name}")
                                     time.sleep(0.5)
                             except (psutil.NoSuchProcess, psutil.AccessDenied):
                                 pass
+                        # Clear instance tracking so launch won't be blocked
+                        manager.instances.pop(acc_name, None)
                         acc_server = manager.get_default_server(acc_name) or server_key
                         result = manager.launch_instance(acc_name, acc_server)
                         print(f"[VERIFY] Re-relaunched {acc_name} -> {acc_server}: {result}")
