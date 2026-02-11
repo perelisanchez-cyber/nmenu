@@ -252,31 +252,24 @@ local function setupFasterEggOpening()
                     return originalStarOpen(petData)
                 end
 
-                -- Try to speed up by using hookfunction if available (some executors)
-                local hooked = false
-                local originalWait = task.wait
-
-                pcall(function()
-                    if hookfunction then
-                        local fastWait = function(duration)
-                            if duration and duration > 0.1 then
-                                return originalWait(0.02)
-                            end
-                            return originalWait(duration)
-                        end
-                        hookfunction(task.wait, fastWait)
-                        hooked = true
+                -- Speed up by temporarily replacing task.wait (like original)
+                local oldWait = task.wait
+                local fastWait = function(duration)
+                    if duration and duration > 0.1 then
+                        return oldWait(0.05)  -- Speed up long waits
+                    else
+                        return oldWait(duration)  -- Keep short waits normal
                     end
-                end)
+                end
 
+                -- Temporarily replace task.wait
+                task.wait = fastWait
+
+                -- Call original function with faster waits
                 local result = originalStarOpen(petData)
 
-                -- Restore if we hooked
-                if hooked then
-                    pcall(function()
-                        hookfunction(task.wait, originalWait)
-                    end)
-                end
+                -- Restore original wait
+                task.wait = oldWait
 
                 return result
             end
@@ -294,19 +287,26 @@ local function setupSpamHatch()
         if not MS then return end
 
         -- Use a loop instead of Heartbeat to avoid stack overflow
+        -- But fire multiple times per cycle like the original
         while Config.State.running do
             if Config.Toggles.utilityToggles.SpamHatch
                 and MS.Cache.Star
                 and not MS.LocalPlayer:GetAttribute('StarOpening')
             then
+                local mapName = MS.Cache.Star.Parent.Parent.Name
                 pcall(function()
-                    MS.Bridge:Fire('Stars', 'Roll', {
-                        Map = MS.Cache.Star.Parent.Parent.Name,
-                        Type = 'Multi'
-                    })
+                    -- Fire multiple times like original (but not every frame)
+                    for i = 1, 3 do
+                        MS.Bridge:Fire('Stars', 'Roll', {
+                            Map = mapName,
+                            Type = 'Multi'
+                        })
+                    end
                 end)
+                task.wait(0.05)  -- 50ms = 60 requests/sec (3 fires × 20 cycles)
+            else
+                task.wait(0.1)  -- Check less often when not active
             end
-            task.wait(0.15)  -- 150ms between hatches
         end
     end)
 end
