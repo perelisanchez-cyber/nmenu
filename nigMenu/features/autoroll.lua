@@ -69,30 +69,40 @@ end
 function AutoRoll.startLoops()
     -- Get all maps
     local allMaps = Utils.getAllMaps()
-    
+
     -- Initialize toggle states for new maps
     for _, mapName in ipairs(allMaps) do
         if Config.Toggles.autoRollLoops[mapName] == nil then
             Config.Toggles.autoRollLoops[mapName] = false
         end
     end
-    
-    -- Start a loop for each map
-    for _, mapName in ipairs(allMaps) do
-        task.spawn(function()
-            while Config.State.running do
+
+    -- Single loop that handles all maps sequentially (prevents stack overflow)
+    task.spawn(function()
+        while Config.State.running do
+            local didRoll = false
+
+            for _, mapName in ipairs(allMaps) do
                 if Config.Toggles.autoRollLoops[mapName] then
                     pcall(function()
                         AutoRoll.roll(mapName, Config.State.usePremiumRolls)
                     end)
+                    didRoll = true
+                    -- Small delay between each map roll to prevent spam
+                    task.wait(0.2)
                 end
-                
-                -- Different wait times for premium vs normal
-                local waitTime = Config.State.usePremiumRolls and 0.5 or 0.1
+            end
+
+            -- If no maps are active, wait a bit before checking again
+            if not didRoll then
+                task.wait(0.5)
+            else
+                -- Wait between full cycles
+                local waitTime = Config.State.usePremiumRolls and 0.5 or 0.3
                 task.wait(waitTime)
             end
-        end)
-    end
+        end
+    end)
 end
 
 -- ============================================================================
