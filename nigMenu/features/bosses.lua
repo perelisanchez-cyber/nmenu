@@ -969,107 +969,260 @@ function Bosses.scanServerFolder()
 end
 
 -- ============================================================================
--- DEBUG: VIEW ALL BOSS SPAWN TIMES (Self-calibrating from live data)
+-- BOSS SPAWN SCHEDULE (Hard-coded PST times)
+-- All times are in PST (UTC-8). Server time is UTC.
 -- ============================================================================
 
--- Cached WorldBossData
-local cachedWorldBossData = nil
+-- Convert hours:minutes to seconds since midnight
+local function hm(h, m) return h * 3600 + (m or 0) * 60 end
 
-local function getWorldBossData()
-    if cachedWorldBossData then return cachedWorldBossData end
-    pcall(function()
-        cachedWorldBossData = require(game:GetService("ReplicatedStorage").SharedModules.WorldBossData)
-    end)
-    return cachedWorldBossData
+-- Regular Bosses: 5 minute duration (300 seconds)
+-- Angel Bosses: 10 minute duration (600 seconds)
+local BOSS_DURATION = 300
+local ANGEL_DURATION = 600
+
+-- Hard-coded spawn schedule in PST (seconds since midnight)
+-- Each boss has an array of spawn times that repeat daily
+local BOSS_SCHEDULE = {
+    -- World 1-6: 5 spawns per day, starting 3:00 PM, every 4-5 hours
+    [1]  = { name = "Strong",         type = "Boss",  spawns = {hm(15,0), hm(19,0), hm(0,0), hm(5,0), hm(10,0)} },
+    [2]  = { name = "Goblin King",    type = "Boss",  spawns = {hm(15,10), hm(19,10), hm(0,10), hm(5,10), hm(10,10)} },
+    [3]  = { name = "Bomas",          type = "Boss",  spawns = {hm(15,20), hm(19,20), hm(0,20), hm(5,20), hm(10,20)} },
+    [4]  = { name = "Sands Titan",    type = "Boss",  spawns = {hm(15,30), hm(19,30), hm(0,30), hm(5,30), hm(10,30)} },
+    [5]  = { name = "Kasak",          type = "Boss",  spawns = {hm(15,40), hm(19,40), hm(0,40), hm(5,40), hm(10,40)} },
+    [6]  = { name = "No Punch",       type = "Boss",  spawns = {hm(15,50), hm(19,50), hm(0,50), hm(5,50), hm(10,50)} },
+    -- World 7-12: 4 spawns per day (no 3-4 PM spawn)
+    [7]  = { name = "Buryry",         type = "Boss",  spawns = {hm(20,0), hm(1,0), hm(6,0), hm(11,0)} },
+    [8]  = { name = "Cerberus",       type = "Boss",  spawns = {hm(20,10), hm(1,10), hm(6,10), hm(11,10)} },
+    [9]  = { name = "Ogre",           type = "Boss",  spawns = {hm(20,20), hm(1,20), hm(6,20), hm(11,20)} },
+    [10] = { name = "Red Knight",     type = "Boss",  spawns = {hm(20,30), hm(1,30), hm(6,30), hm(11,30)} },
+    [11] = { name = "RainHard",       type = "Boss",  spawns = {hm(20,40), hm(1,40), hm(6,40), hm(11,40)} },
+    [12] = { name = "Shaman",         type = "Boss",  spawns = {hm(20,50), hm(1,50), hm(6,50), hm(11,50)} },
+    -- World 13-18: 5 spawns
+    [13] = { name = "Whiteshiki",     type = "Boss",  spawns = {hm(16,0), hm(21,0), hm(2,0), hm(7,0), hm(11,50)} },
+    [14] = { name = "Raze",           type = "Boss",  spawns = {hm(16,10), hm(21,10), hm(2,10), hm(7,10), hm(12,10)} },
+    [15] = { name = "Nyxarion",       type = "Boss",  spawns = {hm(16,20), hm(21,20), hm(2,20), hm(7,20), hm(12,20)} },
+    [16] = { name = "Keeper",         type = "Boss",  spawns = {hm(16,30), hm(21,30), hm(2,30), hm(7,30), hm(12,30)} },
+    [17] = { name = "Small Inferno",  type = "Boss",  spawns = {hm(16,40), hm(21,40), hm(2,40), hm(7,40), hm(12,40)} },
+    [18] = { name = "Erydos",         type = "Boss",  spawns = {hm(16,50), hm(21,50), hm(2,50), hm(7,50), hm(12,50)} },
+    -- World 19-24: 5 spawns
+    [19] = { name = "Posyros",        type = "Boss",  spawns = {hm(17,0), hm(22,0), hm(3,0), hm(8,0), hm(13,0)} },
+    [20] = { name = "Nira",           type = "Boss",  spawns = {hm(17,10), hm(22,10), hm(3,10), hm(8,10), hm(13,10)} },
+    [21] = { name = "Enru",           type = "Boss",  spawns = {hm(17,20), hm(22,20), hm(3,20), hm(8,20), hm(13,20)} },
+    [22] = { name = "Ifrit",          type = "Boss",  spawns = {hm(17,30), hm(22,30), hm(3,30), hm(8,30), hm(13,30)} },
+    [23] = { name = "Blakaru",        type = "Boss",  spawns = {hm(17,40), hm(22,40), hm(3,40), hm(8,40), hm(13,40)} },
+    [24] = { name = "Aureon",         type = "Boss",  spawns = {hm(17,50), hm(22,50), hm(3,50), hm(8,50), hm(13,50)} },
+    -- World 25-30: 5 spawns
+    [25] = { name = "White Deity",    type = "Boss",  spawns = {hm(18,0), hm(23,0), hm(4,0), hm(9,0), hm(14,0)} },
+    [26] = { name = "Krampus",        type = "Boss",  spawns = {hm(18,10), hm(23,10), hm(4,10), hm(9,10), hm(14,10)} },
+    [27] = { name = "Steam Giant",    type = "Boss",  spawns = {hm(18,20), hm(23,20), hm(4,20), hm(9,20), hm(14,20)} },
+    [28] = { name = "World Legend",   type = "Boss",  spawns = {hm(18,30), hm(23,30), hm(4,30), hm(9,30), hm(14,30)} },
+    [29] = { name = "Shark Tooth",    type = "Boss",  spawns = {hm(18,40), hm(23,40), hm(4,40), hm(9,40), hm(14,40)} },
+    [30] = { name = "Small Alchemist",type = "Boss",  spawns = {hm(18,50), hm(23,50), hm(4,50), hm(9,50), hm(14,50)} },
+}
+
+-- Angel schedule (separate table, same world numbers)
+local ANGEL_SCHEDULE = {
+    [1]  = { name = "BossAngel_1",  spawns = {hm(11,30), hm(20,30), hm(4,0)} },
+    [2]  = { name = "BossAngel_2",  spawns = {hm(11,45), hm(20,45), hm(4,15)} },
+    [3]  = { name = "BossAngel_3",  spawns = {hm(12,0), hm(21,0), hm(4,30)} },
+    [4]  = { name = "BossAngel_4",  spawns = {hm(12,15), hm(21,15), hm(4,45)} },
+    [5]  = { name = "BossAngel_5",  spawns = {hm(12,30), hm(21,30), hm(5,0)} },
+    [6]  = { name = "BossAngel_6",  spawns = {hm(12,45), hm(21,45), hm(5,15)} },
+    [7]  = { name = "BossAngel_7",  spawns = {hm(13,0), hm(22,0), hm(5,30)} },
+    [8]  = { name = "BossAngel_8",  spawns = {hm(13,15), hm(22,15), hm(5,45)} },
+    [9]  = { name = "BossAngel_9",  spawns = {hm(13,30), hm(22,30), hm(6,0)} },
+    [10] = { name = "BossAngel_10", spawns = {hm(13,45), hm(22,45), hm(6,15)} },
+    [11] = { name = "BossAngel_11", spawns = {hm(14,0), hm(23,0), hm(6,30)} },
+    [12] = { name = "BossAngel_12", spawns = {hm(14,15), hm(23,15), hm(6,45)} },
+    -- World 13-18: 4 spawns
+    [13] = { name = "BossAngel_13", spawns = {hm(14,30), hm(16,0), hm(23,30), hm(7,0)} },
+    [14] = { name = "BossAngel_14", spawns = {hm(14,45), hm(16,15), hm(23,45), hm(7,15)} },
+    [15] = { name = "BossAngel_15", spawns = {hm(15,0), hm(16,30), hm(0,0), hm(7,30)} },
+    [16] = { name = "BossAngel_16", spawns = {hm(15,15), hm(16,45), hm(0,15), hm(7,45)} },
+    [17] = { name = "BossAngel_17", spawns = {hm(15,30), hm(17,0), hm(0,30), hm(8,0)} },
+    [18] = { name = "BossAngel_18", spawns = {hm(15,45), hm(17,15), hm(0,45), hm(8,15)} },
+    -- World 19-30: 3 spawns
+    [19] = { name = "BossAngel_19", spawns = {hm(17,30), hm(1,0), hm(8,30)} },
+    [20] = { name = "BossAngel_20", spawns = {hm(17,45), hm(1,15), hm(8,45)} },
+    [21] = { name = "BossAngel_21", spawns = {hm(18,0), hm(1,30), hm(9,0)} },
+    [22] = { name = "BossAngel_22", spawns = {hm(18,15), hm(1,45), hm(9,15)} },
+    [23] = { name = "BossAngel_23", spawns = {hm(18,30), hm(2,0), hm(9,30)} },
+    [24] = { name = "BossAngel_24", spawns = {hm(18,45), hm(2,15), hm(9,45)} },
+    [25] = { name = "BossAngel_25", spawns = {hm(19,0), hm(2,30), hm(10,0)} },
+    [26] = { name = "BossAngel_26", spawns = {hm(19,15), hm(2,45), hm(10,15)} },
+    [27] = { name = "BossAngel_27", spawns = {hm(19,30), hm(3,0), hm(10,30)} },
+    [28] = { name = "BossAngel_28", spawns = {hm(19,45), hm(3,15), hm(10,45)} },
+    [29] = { name = "BossAngel_29", spawns = {hm(20,0), hm(3,30), hm(11,0)} },
+    [30] = { name = "BossAngel_30", spawns = {hm(20,15), hm(3,45), hm(11,15)} },
+}
+
+-- Get current PST time (seconds since midnight PST)
+local function getPSTSeconds()
+    local now = workspace:GetServerTimeNow()
+    -- PST = UTC - 8 hours, then mod 86400 to get seconds since midnight
+    return (now - 8 * 3600) % 86400
 end
 
--- Calibrated offsets per cooldown value (different cooldowns may have different offsets)
-local calibratedOffsets = {}
-local isCalibrated = false
-
--- Get the boss folder in workspace
-local function getBossFolder()
-    local folder = nil
-    pcall(function()
-        folder = workspace:WaitForChild("Server", 5):WaitForChild("Enemies", 5):WaitForChild("WorldBoss", 5)
-    end)
-    return folder
+-- Check if a boss is currently active given PST seconds and spawn times
+local function isActiveNow(pstSeconds, spawnTimes, duration)
+    for _, spawnTime in ipairs(spawnTimes) do
+        local endTime = spawnTime + duration
+        -- Handle midnight wrap (e.g., spawn at 23:50, ends at 00:00)
+        if endTime >= 86400 then
+            -- Spawn wraps past midnight
+            if pstSeconds >= spawnTime or pstSeconds < (endTime % 86400) then
+                return true, duration - ((pstSeconds - spawnTime) % 86400)
+            end
+        else
+            if pstSeconds >= spawnTime and pstSeconds < endTime then
+                return true, endTime - pstSeconds
+            end
+        end
+    end
+    return false, nil
 end
 
--- Self-calibrate by scanning live boss parts
--- Each cooldown value may have a different offset
--- Always updates offsets when boss parts are found (continuous recalibration)
-local function calibrateOffsets()
-    local WorldBossData = getWorldBossData()
-    if not WorldBossData or not WorldBossData.BossConfigs then return false end
+-- Get time until next spawn
+local function getTimeUntilSpawn(pstSeconds, spawnTimes)
+    local minWait = 86400 -- max 24 hours
+    for _, spawnTime in ipairs(spawnTimes) do
+        local wait
+        if spawnTime > pstSeconds then
+            wait = spawnTime - pstSeconds
+        else
+            wait = (86400 - pstSeconds) + spawnTime -- wrap to next day
+        end
+        if wait < minWait then
+            minWait = wait
+        end
+    end
+    return minWait
+end
 
-    local bossFolder = getBossFolder()
-    if not bossFolder then return false end
+-- Get spawn times for a specific world (replaces calibration-based getWorldSpawnTimes)
+function Bosses.getWorldSpawnTimes(worldNum)
+    local data = Bosses.Data[worldNum]
+    if not data then return nil, nil end
 
-    local foundAny = false
+    local pstSeconds = getPSTSeconds()
+    local bossInfo = nil
+    local angelInfo = nil
 
-    pcall(function()
-        for _, mapFolder in ipairs(bossFolder:GetChildren()) do
-            for _, boss in ipairs(mapFolder:GetChildren()) do
-                if boss:IsA("BasePart") and boss:GetAttribute("spawnTime") then
-                    local config = WorldBossData.BossConfigs[boss.Name]
-                    if config then
-                        local actual = boss:GetAttribute("spawnTime")
-                        local anchor = config.startTime.hour * 3600 + config.startTime.min * 60
-                        local cd = config.cooldown
-                        -- Always update offset (allows continuous recalibration like v5)
-                        calibratedOffsets[cd] = (actual - anchor) % cd
-                        foundAny = true
-                    end
+    -- Check regular boss
+    local bossSchedule = BOSS_SCHEDULE[worldNum]
+    if bossSchedule then
+        local isActive, timeLeft = isActiveNow(pstSeconds, bossSchedule.spawns, BOSS_DURATION)
+        if isActive then
+            bossInfo = {
+                isActive = true,
+                timeRemaining = timeLeft,
+                name = bossSchedule.name
+            }
+        else
+            local timeUntil = getTimeUntilSpawn(pstSeconds, bossSchedule.spawns)
+            bossInfo = {
+                isActive = false,
+                timeRemaining = timeUntil,
+                name = bossSchedule.name
+            }
+        end
+    end
+
+    -- Check angel boss
+    local angelSchedule = ANGEL_SCHEDULE[worldNum]
+    if angelSchedule then
+        local isActive, timeLeft = isActiveNow(pstSeconds, angelSchedule.spawns, ANGEL_DURATION)
+        if isActive then
+            angelInfo = {
+                isActive = true,
+                timeRemaining = timeLeft,
+                name = angelSchedule.name
+            }
+        else
+            local timeUntil = getTimeUntilSpawn(pstSeconds, angelSchedule.spawns)
+            angelInfo = {
+                isActive = false,
+                timeRemaining = timeUntil,
+                name = angelSchedule.name
+            }
+        end
+    end
+
+    return bossInfo, angelInfo
+end
+
+-- Get all currently active bosses (for farm loop)
+function Bosses.getActiveFromSchedule()
+    local pstSeconds = getPSTSeconds()
+    local active = {}
+
+    for worldNum = 1, 30 do
+        local data = Bosses.Data[worldNum]
+        if not data then continue end
+        if worldNum < Bosses.farmMinWorld or worldNum > Bosses.farmMaxWorld then continue end
+
+        -- Check regular boss
+        if Bosses.farmBosses then
+            local bossSchedule = BOSS_SCHEDULE[worldNum]
+            if bossSchedule then
+                local isActive, timeLeft = isActiveNow(pstSeconds, bossSchedule.spawns, BOSS_DURATION)
+                if isActive then
+                    table.insert(active, {
+                        world = worldNum,
+                        type = "Boss",
+                        bossName = bossSchedule.name,
+                        coords = data.boss,
+                        spawn = data.spawn,
+                        timeLeft = timeLeft
+                    })
                 end
             end
         end
-    end)
 
-    if foundAny then
-        isCalibrated = true
-    end
-
-    return foundAny
-end
-
--- Fallback timezone offset (UTC+3 / Moscow time) used when calibration not available
-local TIMEZONE_OFFSET_FALLBACK = 10800 -- 3 hours in seconds
-
--- Calculate next spawn and despawn times using calibrated offset
-local function getNextSpawn(config)
-    local now = workspace:GetServerTimeNow()
-    local anchor = config.startTime.hour * 3600 + config.startTime.min * 60
-    local cd = config.cooldown
-    local dur = config.duration
-
-    -- Get calibrated offset for this cooldown
-    local offset = calibratedOffsets[cd]
-
-    if not offset then
-        -- Try any available calibrated offset as secondary fallback
-        for _, knownOff in pairs(calibratedOffsets) do
-            offset = knownOff
-            break
+        -- Check angel boss
+        if Bosses.farmAngels then
+            local angelSchedule = ANGEL_SCHEDULE[worldNum]
+            if angelSchedule then
+                local isActive, timeLeft = isActiveNow(pstSeconds, angelSchedule.spawns, ANGEL_DURATION)
+                if isActive then
+                    table.insert(active, {
+                        world = worldNum,
+                        type = "Angel",
+                        bossName = angelSchedule.name,
+                        coords = data.angel,
+                        spawn = data.spawn,
+                        timeLeft = timeLeft
+                    })
+                end
+            end
         end
     end
 
-    if not offset then
-        -- Final fallback: use UTC+3 timezone offset (what the server likely uses)
-        -- The offset per cooldown is: 10800 % cooldown
-        offset = TIMEZONE_OFFSET_FALLBACK % cd
-    end
+    -- Sort by world number
+    table.sort(active, function(a, b) return a.world < b.world end)
+    return active
+end
 
-    local base = anchor + offset
-    local n = math.floor((now - base) / cd)
-    local spawnTime = base + n * cd
+-- Format PST time for display (e.g., "3:00p")
+local function formatPST(pstSeconds)
+    local hour24 = math.floor(pstSeconds / 3600)
+    local min = math.floor((pstSeconds % 3600) / 60)
+    local hour12 = ((hour24 - 1) % 12) + 1
+    if hour12 == 0 then hour12 = 12 end
+    local ampm = hour24 >= 12 and "p" or "a"
+    return string.format("%d:%02d%s", hour12, min, ampm)
+end
 
-    -- If we're past the despawn time, advance to next cycle
-    if now > spawnTime + dur then
-        spawnTime = spawnTime + cd
-    end
+-- Check if timers are calibrated (always true now with hard-coded schedule)
+function Bosses.isTimerCalibrated()
+    return true
+end
 
-    return spawnTime, spawnTime + dur
+-- Recalibrate (no-op with hard-coded schedule, but kept for compatibility)
+function Bosses.recalibrateTimers()
+    print("[Bosses] Using hard-coded PST schedule (no calibration needed)")
+    return true
 end
 
 -- Format time nicely
@@ -1085,89 +1238,10 @@ local function formatTimeRemaining(seconds)
     end
 end
 
--- Get spawn times for a specific world using the correct formula
--- Returns: bossInfo, angelInfo (each with isActive, startTime, timeRemaining)
-function Bosses.getWorldSpawnTimes(worldNum)
-    local data = Bosses.Data[worldNum]
-    if not data then return nil, nil end
-
-    local WorldBossData = getWorldBossData()
-    if not WorldBossData or not WorldBossData.BossConfigs then return nil, nil end
-
-    -- Always try to calibrate (continuous recalibration like v5)
-    -- This picks up new boss parts that spawn and keeps offsets accurate
-    calibrateOffsets()
-
-    local now = workspace:GetServerTimeNow()
-
-    -- Get boss config name from event name (e.g., "RainHard_BossEvent" -> "RainHard")
-    local bossConfigName = data.bossEvent:gsub("_BossEvent", "")
-    local angelConfigName = "BossAngel_" .. worldNum
-
-    local bossInfo = nil
-    local angelInfo = nil
-
-    -- Calculate boss spawn time
-    local bossConfig = WorldBossData.BossConfigs[bossConfigName]
-    if bossConfig then
-        local spawnTime, despawnTime = getNextSpawn(bossConfig)
-        local timeUntilSpawn = spawnTime - now
-        local timeUntilDespawn = despawnTime - now
-        local isActive = timeUntilSpawn <= 0 and timeUntilDespawn > 0
-
-        bossInfo = {
-            isActive = isActive,
-            startTime = spawnTime,
-            endTime = despawnTime,
-            timeRemaining = isActive and timeUntilDespawn or timeUntilSpawn
-        }
-    end
-
-    -- Calculate angel spawn time
-    local angelConfig = WorldBossData.BossConfigs[angelConfigName]
-    if angelConfig then
-        local spawnTime, despawnTime = getNextSpawn(angelConfig)
-        local timeUntilSpawn = spawnTime - now
-        local timeUntilDespawn = despawnTime - now
-        local isActive = timeUntilSpawn <= 0 and timeUntilDespawn > 0
-
-        angelInfo = {
-            isActive = isActive,
-            startTime = spawnTime,
-            endTime = despawnTime,
-            timeRemaining = isActive and timeUntilDespawn or timeUntilSpawn
-        }
-    end
-
-    return bossInfo, angelInfo
-end
-
--- Force recalibration (call when visiting a new map with bosses)
-function Bosses.recalibrateTimers()
-    calibratedOffsets = {}
-    isCalibrated = false
-    local success = calibrateOffsets()
-    if success then
-        print("[Bosses] Timer calibration successful")
-        for cd, off in pairs(calibratedOffsets) do
-            print(string.format("[Bosses] Cooldown %d -> offset %d", cd, off))
-        end
-    else
-        print("[Bosses] Timer calibration failed - no live boss parts found")
-    end
-    return success
-end
-
--- Check if timers are calibrated
-function Bosses.isTimerCalibrated()
-    return isCalibrated
-end
-
 
 function Bosses.debugBossSpawnTimes()
     --[[
-        Calculate ALL boss spawn times using WorldBossData.BossConfigs.
-        Uses self-calibrating offset from live boss data.
+        Show all boss spawn times using the hard-coded PST schedule.
         Opens console and shows formatted output.
     ]]
     local NM = getNM()
@@ -1178,95 +1252,92 @@ function Bosses.debugBossSpawnTimes()
 
     if con then con.clear(); con.show() end
 
-    -- Load WorldBossData
-    local WorldBossData = getWorldBossData()
+    local pstSeconds = getPSTSeconds()
+    local pstTime = formatPST(pstSeconds)
 
-    if not WorldBossData or not WorldBossData.BossConfigs then
-        log("ERROR: Cannot load WorldBossData.BossConfigs")
-        return
-    end
-
-    -- Try to calibrate if needed
-    if not isCalibrated then
-        calibrateOffsets()
-    end
-
-    local now = workspace:GetServerTimeNow()
-
-    log("====== BOSS SPAWN TIMES ======")
-    log("Server Time: " .. string.format("%.1f", now))
-    if isCalibrated then
-        local parts = {}
-        for cd, off in pairs(calibratedOffsets) do
-            table.insert(parts, string.format("cd%d=%d", cd, off))
-        end
-        log("Calibrated: " .. table.concat(parts, ", "))
-    else
-        log("NOT CALIBRATED - timers may be inaccurate")
-    end
+    log("====== BOSS SPAWN TIMES (PST Schedule) ======")
+    log("Current PST: " .. pstTime)
     log("")
 
     local allBosses = {}
 
-    for name, config in pairs(WorldBossData.BossConfigs) do
-        local spawnTime, despawnTime = getNextSpawn(config)
-        local timeUntilSpawn = spawnTime - now
-        local timeUntilDespawn = despawnTime - now
-        local active = timeUntilSpawn <= 0 and timeUntilDespawn > 0
-        local isAngel = name:find("BossAngel") ~= nil
-        local displayName = isAngel and name:gsub("BossAngel_", "Angel ") or name
+    -- Add all regular bosses
+    for worldNum = 1, 30 do
+        local data = Bosses.Data[worldNum]
+        local schedule = BOSS_SCHEDULE[worldNum]
+        if data and schedule then
+            local isActive, timeLeft = isActiveNow(pstSeconds, schedule.spawns, BOSS_DURATION)
+            local timeUntil = isActive and timeLeft or getTimeUntilSpawn(pstSeconds, schedule.spawns)
 
-        table.insert(allBosses, {
-            name = name,
-            displayName = displayName,
-            map = config.MapId or "?",
-            isAngel = isAngel,
-            active = active,
-            spawnTime = spawnTime,
-            despawnTime = despawnTime,
-            timeUntilSpawn = timeUntilSpawn,
-            timeUntilDespawn = timeUntilDespawn,
-            cooldown = config.cooldown,
-            duration = config.duration,
-        })
+            table.insert(allBosses, {
+                world = worldNum,
+                name = schedule.name,
+                displayName = schedule.name,
+                map = data.spawn,
+                isAngel = false,
+                active = isActive,
+                timeRemaining = timeUntil,
+                coords = data.boss,
+                type = "Boss"
+            })
+        end
     end
 
-    -- Sort: active first (by despawn time), then by time until spawn
+    -- Add all angel bosses
+    for worldNum = 1, 30 do
+        local data = Bosses.Data[worldNum]
+        local schedule = ANGEL_SCHEDULE[worldNum]
+        if data and schedule then
+            local isActive, timeLeft = isActiveNow(pstSeconds, schedule.spawns, ANGEL_DURATION)
+            local timeUntil = isActive and timeLeft or getTimeUntilSpawn(pstSeconds, schedule.spawns)
+
+            table.insert(allBosses, {
+                world = worldNum,
+                name = schedule.name,
+                displayName = "Angel " .. worldNum,
+                map = data.spawn,
+                isAngel = true,
+                active = isActive,
+                timeRemaining = timeUntil,
+                coords = data.angel,
+                type = "Angel"
+            })
+        end
+    end
+
+    -- Sort: active first (by time remaining), then by time until spawn
     table.sort(allBosses, function(a, b)
         if a.active and not b.active then return true end
         if not a.active and b.active then return false end
-        if a.active and b.active then
-            return a.timeUntilDespawn < b.timeUntilDespawn
-        end
-        return a.timeUntilSpawn < b.timeUntilSpawn
+        return a.timeRemaining < b.timeRemaining
     end)
 
     local activeCount, soonCount, laterCount = 0, 0, 0
 
     for _, boss in ipairs(allBosses) do
-        local icon, timeStr, color
+        local icon, timeStr
 
         if boss.active then
             activeCount = activeCount + 1
             icon = "🟢"
-            timeStr = "ACTIVE - " .. formatTimeRemaining(boss.timeUntilDespawn) .. " left"
-        elseif boss.timeUntilSpawn <= 1800 then -- 30 mins
+            timeStr = "ACTIVE - " .. formatTimeRemaining(boss.timeRemaining) .. " left"
+        elseif boss.timeRemaining <= 1800 then -- 30 mins
             soonCount = soonCount + 1
             icon = "🟡"
-            timeStr = "Spawns in: " .. formatTimeRemaining(boss.timeUntilSpawn)
+            timeStr = "Spawns in: " .. formatTimeRemaining(boss.timeRemaining)
         else
             laterCount = laterCount + 1
             icon = "⚪"
-            timeStr = "Spawns in: " .. formatTimeRemaining(boss.timeUntilSpawn)
+            timeStr = "Spawns in: " .. formatTimeRemaining(boss.timeRemaining)
         end
 
         local typeStr = boss.isAngel and "[Angel]" or "[Boss]"
-        log(string.format("%s %s %s @ %s | %s", icon, typeStr, boss.displayName, boss.map, timeStr))
+        log(string.format("%s %s W%d %s @ %s | %s", icon, typeStr, boss.world, boss.displayName, boss.map, timeStr))
     end
 
     log("")
     log(string.format("Summary: %d Active | %d Soon (<30m) | %d Later", activeCount, soonCount, laterCount))
-    log("Formula: base = anchor + calibrated_offset, cycle = cooldown")
+    log("Schedule: Hard-coded PST times")
     log("====== END ======")
 
     -- Store for potential teleport use
@@ -1506,22 +1577,19 @@ function Bosses.startFarmLoop()
         end
 
         while Bosses.farmEnabled and Config.State.running do
-            Bosses.status = "Scanning for bosses..."
+            Bosses.status = "Checking spawn schedule..."
             Bosses.currentTarget = nil
 
             -- ============================================================
-            -- STEP 1: Scan server folder for alive targets (ALL worlds)
+            -- STEP 1: Use hard-coded PST schedule to find active bosses
+            -- This works immediately without needing to visit boss maps first
             -- ============================================================
-            local targets = Bosses.scanServerFolder()
+            local scheduleTargets = Bosses.getActiveFromSchedule()
 
-            if #targets > 0 then
-                log("Server scan: " .. #targets .. " alive target(s)")
-                for _, target in ipairs(targets) do
+            if #scheduleTargets > 0 then
+                log("Schedule: " .. #scheduleTargets .. " active spawn(s)")
+                for _, target in ipairs(scheduleTargets) do
                     if not Bosses.farmEnabled or not Config.State.running then break end
-
-                    -- Teleport to the target's world
-                    Bosses.status = "TP -> W" .. target.world .. " " .. target.type .. " (" .. target.spawn .. ")"
-                    log("Teleporting to W" .. target.world .. " " .. target.type)
 
                     -- Check if this target is on stale cooldown
                     local staleKey = target.world .. "_" .. target.type
@@ -1532,16 +1600,22 @@ function Bosses.startFarmLoop()
                         continue
                     end
 
+                    -- Teleport to the target's world
+                    Bosses.status = "TP -> W" .. target.world .. " " .. target.type .. " (" .. target.spawn .. ")"
+                    log("Teleporting to W" .. target.world .. " " .. target.type .. " (" .. math.floor(target.timeLeft or 0) .. "s left)")
+
                     local success = Bosses.teleportAndWait(target.world, target.coords)
                     if success then
                         -- Wait and verify boss exists locally (up to 15 seconds)
                         local foundLocally = false
+                        local localTarget = nil
                         for attempt = 1, 5 do
                             task.wait(3)  -- Check every 3 seconds (5 attempts = 15 seconds total)
                             local localTargets = Bosses.buildTargetList()
                             for _, lt in ipairs(localTargets) do
                                 if lt.world == target.world and lt.type == target.type then
                                     foundLocally = true
+                                    localTarget = lt
                                     break
                                 end
                             end
@@ -1552,23 +1626,73 @@ function Bosses.startFarmLoop()
                         end
 
                         if not foundLocally then
-                            log("W" .. target.world .. " " .. target.type .. " not found after 15s (marking stale for 30s)")
-                            Bosses.staleTargets[staleKey] = now + 30  -- 30 second cooldown
-                            -- Continue to next target instead of farming nothing
+                            log("W" .. target.world .. " " .. target.type .. " not found after 15s (already dead, marking stale)")
+                            Bosses.staleTargets[staleKey] = now + 60  -- 60 second cooldown for dead bosses
                         else
-                            -- Re-check server part health (may have died while traveling)
-                            local health = 0
-                            pcall(function()
-                                if target.serverPart and target.serverPart.Parent then
-                                    health = target.serverPart:GetAttribute("Health") or 0
+                            -- Found the boss alive! Check server folder for health tracking
+                            local serverTargets = Bosses.scanServerFolder()
+                            local serverTarget = nil
+                            for _, st in ipairs(serverTargets) do
+                                if st.world == target.world and st.type == target.type then
+                                    serverTarget = st
+                                    break
                                 end
-                            end)
-                            if health > 0 then
-                                farmTarget(target)
-                                -- Clear stale status if we successfully farmed
+                            end
+
+                            if serverTarget and serverTarget.health and serverTarget.health > 0 then
+                                -- Use server target for accurate health tracking
+                                farmTarget(serverTarget)
+                                Bosses.staleTargets[staleKey] = nil
+                            elseif localTarget then
+                                -- Fallback: farm using local target (less accurate health)
+                                log("Using local target (no server health data)")
+                                -- Create a pseudo-target for farming
+                                local pseudoTarget = {
+                                    world = target.world,
+                                    type = target.type,
+                                    bossName = target.bossName,
+                                    coords = target.coords,
+                                    spawn = target.spawn,
+                                }
+                                -- For pseudo-targets, we need different death detection
+                                Bosses.currentTarget = pseudoTarget
+                                log("Farming W" .. pseudoTarget.world .. " " .. pseudoTarget.type .. ": " .. pseudoTarget.bossName)
+
+                                -- Simple farm loop checking local targets
+                                while Bosses.farmEnabled and Config.State.running do
+                                    local stillAlive = false
+                                    local currentTargets = Bosses.buildTargetList()
+                                    for _, ct in ipairs(currentTargets) do
+                                        if ct.world == target.world and ct.type == target.type then
+                                            stillAlive = true
+                                            break
+                                        end
+                                    end
+
+                                    if not stillAlive then
+                                        Bosses.kills = Bosses.kills + 1
+                                        log("W" .. target.world .. " " .. target.type .. " DEAD! (kill #" .. Bosses.kills .. ")")
+                                        Bosses.status = target.type .. " dead! (" .. Bosses.kills .. " kills)"
+                                        break
+                                    end
+
+                                    Bosses.status = "W" .. target.world .. " " .. target.type .. " [farming...]"
+
+                                    -- Stay near target coords
+                                    pcall(function()
+                                        local offsetCoords = target.coords + Vector3.new(0, 0, Bosses.TP_Z_OFFSET)
+                                        local hrp = Config.LocalPlayer.Character
+                                            and Config.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                                        if hrp and (hrp.Position - offsetCoords).Magnitude > DRIFT_RADIUS then
+                                            hrp.CFrame = CFrame.new(offsetCoords)
+                                        end
+                                    end)
+
+                                    task.wait(1)
+                                end
                                 Bosses.staleTargets[staleKey] = nil
                             else
-                                log("W" .. target.world .. " " .. target.type .. " died before arrival")
+                                log("W" .. target.world .. " " .. target.type .. " died before farming could start")
                             end
                         end
                     else
@@ -1577,45 +1701,11 @@ function Bosses.startFarmLoop()
                     task.wait(2)
                 end
             else
-                -- ============================================================
-                -- STEP 2: Fallback — use events as hints for remote worlds
-                -- Server folder may not have data if replication is limited
-                -- ============================================================
-                local eventTargets = Bosses.getEventTargets()
-                if #eventTargets > 0 then
-                    log("No server targets, events hint " .. #eventTargets .. " target(s)")
-                    for _, target in ipairs(eventTargets) do
-                        if not Bosses.farmEnabled or not Config.State.running then break end
-
-                        Bosses.status = "Event hint: W" .. target.world .. " " .. target.type .. " (" .. target.spawn .. ")..."
-                        log("Event hints W" .. target.world .. " " .. target.type .. " — TP to verify")
-
-                        local success = Bosses.teleportAndWait(target.world, target.coords)
-                        if not success then continue end
-                        task.wait(2)
-
-                        -- After TP, re-scan server folder (now we're in that world)
-                        local freshTargets = Bosses.scanServerFolder()
-                        local found = nil
-                        for _, ft in ipairs(freshTargets) do
-                            if ft.world == target.world and ft.type == target.type then
-                                found = ft
-                                break
-                            end
-                        end
-
-                        if found then
-                            farmTarget(found)
-                        else
-                            log("W" .. target.world .. " " .. target.type .. " event lied, NPC not alive")
-                        end
-                        task.wait(2)
-                    end
-                else
-                    Bosses.status = "No bosses detected, waiting..."
-                    task.wait(5)
-                    continue
-                end
+                -- No bosses active according to schedule
+                Bosses.status = "No active spawns, waiting..."
+                log("Schedule: no active spawns")
+                task.wait(10)  -- Check again in 10 seconds
+                continue
             end
 
             if not Bosses.farmEnabled or not Config.State.running then break end

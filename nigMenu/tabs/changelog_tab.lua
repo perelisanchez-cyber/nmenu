@@ -19,6 +19,16 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.29",
+        date = "2026-02-11",
+        entries = {
+            { type = "changed", text = "Boss spawn timers now use hard-coded PST schedule (no calibration needed)" },
+            { type = "changed", text = "Farm loop uses schedule-based targeting — works without visiting boss maps first" },
+            { type = "added", text = "All 60 bosses (30 regular + 30 angels) with exact PST spawn times" },
+            { type = "fixed", text = "Timers now show correct countdown immediately on any map" },
+        }
+    },
+    {
         version = "1.0.28",
         date = "2026-02-11",
         entries = {
