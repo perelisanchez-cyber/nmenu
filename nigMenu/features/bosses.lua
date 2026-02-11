@@ -1614,115 +1614,33 @@ function Bosses.startFarmLoop()
 
                     local success = Bosses.teleportAndWait(target.world, target.coords)
                     if success then
-                        -- Wait and verify boss exists locally (up to 15 seconds)
-                        local foundLocally = false
-                        local localTarget = nil
+                        -- Wait and verify boss exists using server folder (up to 15 seconds)
+                        -- Server folder is more reliable than client-side NPC detection
+                        local serverTarget = nil
                         for attempt = 1, 5 do
                             task.wait(3)  -- Check every 3 seconds (5 attempts = 15 seconds total)
-                            local localTargets = Bosses.buildTargetList()
-                            for _, lt in ipairs(localTargets) do
-                                if lt.world == target.world and lt.type == target.type then
-                                    foundLocally = true
-                                    localTarget = lt
+                            local serverTargets = Bosses.scanServerFolder()
+                            for _, st in ipairs(serverTargets) do
+                                if st.world == target.world and st.type == target.type and st.health and st.health > 0 then
+                                    serverTarget = st
+                                    log("W" .. target.world .. " " .. target.type .. " found! HP: " .. st.health)
                                     break
                                 end
                             end
-                            if foundLocally then break end
+                            if serverTarget then break end
                             if attempt < 5 then
-                                log("W" .. target.world .. " " .. target.type .. " not found locally, waiting... (" .. attempt .. "/5)")
+                                log("W" .. target.world .. " " .. target.type .. " not found in server folder, waiting... (" .. attempt .. "/5)")
                             end
                         end
 
-                        if not foundLocally then
+                        if not serverTarget then
                             log("W" .. target.world .. " " .. target.type .. " not found after 15s (already dead, marking stale)")
                             Bosses.staleTargets[staleKey] = now + 60  -- 60 second cooldown for dead bosses
                         else
-                            -- Found the boss alive! Wait a moment for server folder to sync
-                            task.wait(1)
-
-                            -- Try to get server target for accurate health tracking (retry a few times)
-                            local serverTarget = nil
-                            for attempt = 1, 3 do
-                                local serverTargets = Bosses.scanServerFolder()
-                                for _, st in ipairs(serverTargets) do
-                                    if st.world == target.world and st.type == target.type then
-                                        serverTarget = st
-                                        break
-                                    end
-                                end
-                                if serverTarget then break end
-                                task.wait(1)
-                            end
-
-                            if serverTarget and serverTarget.health and serverTarget.health > 0 then
-                                -- Use server target for accurate health tracking (preferred)
-                                log("Using server folder for health tracking (HP: " .. serverTarget.health .. ")")
-                                farmTarget(serverTarget)
-                                Bosses.staleTargets[staleKey] = nil
-                            else
-                                -- Fallback: farm using server folder polling
-                                log("Server target not found, using server folder polling")
-                                Bosses.currentTarget = target
-                                log("Farming W" .. target.world .. " " .. target.type .. ": " .. target.bossName)
-                                local lastHpLog = 0
-
-                                -- Poll server folder for death detection (more reliable than local NPC check)
-                                while Bosses.farmEnabled and Config.State.running do
-                                    local stillAlive = false
-                                    local currentHp = 0
-                                    local serverCheck = Bosses.scanServerFolder()
-                                    for _, sc in ipairs(serverCheck) do
-                                        if sc.world == target.world and sc.type == target.type and sc.health and sc.health > 0 then
-                                            stillAlive = true
-                                            currentHp = sc.health
-                                            Bosses.status = "W" .. target.world .. " " .. target.type .. " [HP: " .. sc.health .. "]"
-                                            break
-                                        end
-                                    end
-
-                                    -- Log HP every 5 seconds
-                                    local now = os.time()
-                                    if stillAlive and now - lastHpLog >= 5 then
-                                        log("W" .. target.world .. " " .. target.type .. " [HP: " .. currentHp .. "] (polling)")
-                                        lastHpLog = now
-                                    end
-
-                                    if not stillAlive then
-                                        log("Server folder shows target dead, double-checking locally...")
-                                        -- Double-check with local targets
-                                        local localCheck = Bosses.buildTargetList()
-                                        local localAlive = false
-                                        for _, lc in ipairs(localCheck) do
-                                            if lc.world == target.world and lc.type == target.type then
-                                                localAlive = true
-                                                break
-                                            end
-                                        end
-
-                                        if not localAlive then
-                                            Bosses.kills = Bosses.kills + 1
-                                            log("W" .. target.world .. " " .. target.type .. " DEAD! (kill #" .. Bosses.kills .. ")")
-                                            Bosses.status = target.type .. " dead! (" .. Bosses.kills .. " kills)"
-                                            break
-                                        else
-                                            log("Local target still alive, continuing...")
-                                        end
-                                    end
-
-                                    -- Stay near target coords
-                                    pcall(function()
-                                        local offsetCoords = target.coords + Vector3.new(0, 0, Bosses.TP_Z_OFFSET)
-                                        local hrp = Config.LocalPlayer.Character
-                                            and Config.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                                        if hrp and (hrp.Position - offsetCoords).Magnitude > DRIFT_RADIUS then
-                                            hrp.CFrame = CFrame.new(offsetCoords)
-                                        end
-                                    end)
-
-                                    task.wait(1)
-                                end
-                                Bosses.staleTargets[staleKey] = nil
-                            end
+                            -- Found the boss alive with health tracking - farm it!
+                            log("Farming with server folder health tracking (HP: " .. serverTarget.health .. ")")
+                            farmTarget(serverTarget)
+                            Bosses.staleTargets[staleKey] = nil
                         end
                     else
                         log("TP to W" .. target.world .. " failed")
