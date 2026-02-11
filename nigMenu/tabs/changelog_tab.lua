@@ -19,6 +19,16 @@ local function getUtils() return _G.nigMenu and _G.nigMenu.Utils end
 
 local changelog = {
     {
+        version = "1.0.30",
+        date = "2026-02-11",
+        entries = {
+            { type = "fixed", text = "Boss detection now uses server folder (workspace.Server) instead of client NPCs" },
+            { type = "fixed", text = "Auto-restart now triggers correctly after killing bosses" },
+            { type = "added", text = "HP logging to console every 5 seconds while farming" },
+            { type = "changed", text = "Simplified farm loop — removed redundant fallback code" },
+        }
+    },
+    {
         version = "1.0.29",
         date = "2026-02-11",
         entries = {
