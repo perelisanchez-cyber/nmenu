@@ -998,6 +998,7 @@ end
 
 -- Self-calibrate by scanning live boss parts
 -- Each cooldown value may have a different offset
+-- Always updates offsets when boss parts are found (continuous recalibration)
 local function calibrateOffsets()
     local WorldBossData = getWorldBossData()
     if not WorldBossData or not WorldBossData.BossConfigs then return false end
@@ -1012,10 +1013,11 @@ local function calibrateOffsets()
             for _, boss in ipairs(mapFolder:GetChildren()) do
                 if boss:IsA("BasePart") and boss:GetAttribute("spawnTime") then
                     local config = WorldBossData.BossConfigs[boss.Name]
-                    if config and not calibratedOffsets[config.cooldown] then
+                    if config then
                         local actual = boss:GetAttribute("spawnTime")
                         local anchor = config.startTime.hour * 3600 + config.startTime.min * 60
                         local cd = config.cooldown
+                        -- Always update offset (allows continuous recalibration like v5)
                         calibratedOffsets[cd] = (actual - anchor) % cd
                         foundAny = true
                     end
@@ -1084,10 +1086,9 @@ function Bosses.getWorldSpawnTimes(worldNum)
     local WorldBossData = getWorldBossData()
     if not WorldBossData or not WorldBossData.BossConfigs then return nil, nil end
 
-    -- Try to calibrate if not yet done
-    if not isCalibrated then
-        calibrateOffsets()
-    end
+    -- Always try to calibrate (continuous recalibration like v5)
+    -- This picks up new boss parts that spawn and keeps offsets accurate
+    calibrateOffsets()
 
     local now = workspace:GetServerTimeNow()
 
