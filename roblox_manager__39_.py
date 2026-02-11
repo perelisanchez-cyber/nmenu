@@ -2219,9 +2219,9 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
 
             # Relaunch in background after delay, then verify all made it in
             def delayed_relaunch():
-                # Clear old heartbeats for this server so we get fresh ones
+                # Clear old heartbeats for accounts being relaunched
                 for reporter in list(manager.player_reports.keys()):
-                    if manager.player_reports[reporter].get("server") == server_key:
+                    if reporter in relaunch_accounts:
                         del manager.player_reports[reporter]
 
                 # Wait for private server to auto-close after all players left
@@ -2229,21 +2229,36 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                 print(f"[RESTART] Waiting {actual_delay}s for server to clear (shutdown_ok={shutdown_ok})...")
                 time.sleep(actual_delay)
 
-                # Final cleanup: kill ALL remaining Roblox processes before relaunch
-                # This catches any that survived the initial kill or spawned during the delay
-                final_killed = 0
-                for p in psutil.process_iter(["pid", "name"]):
-                    try:
-                        if p.info["name"] and "RobloxPlayerBeta" in p.info["name"]:
-                            p.kill()
-                            final_killed += 1
-                    except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        pass
-                if final_killed:
-                    print(f"[RESTART] Final cleanup: killed {final_killed} remaining Roblox process(es)")
-                    time.sleep(1)
-                # Clear all instance tracking to start fresh
-                manager.instances.clear()
+                if specific_account:
+                    # Single-account restart: only clean up that one account
+                    # Don't touch other running instances
+                    inst = manager.instances.get(specific_account)
+                    if inst and inst.get("pid"):
+                        try:
+                            p = psutil.Process(inst["pid"])
+                            if p.is_running():
+                                p.kill()
+                                print(f"[RESTART] Final cleanup: killed {specific_account}'s process")
+                                time.sleep(1)
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            pass
+                    manager.instances.pop(specific_account, None)
+                else:
+                    # Full restart: kill ALL remaining Roblox processes before relaunch
+                    # This catches any that survived the initial kill or spawned during the delay
+                    final_killed = 0
+                    for p in psutil.process_iter(["pid", "name"]):
+                        try:
+                            if p.info["name"] and "RobloxPlayerBeta" in p.info["name"]:
+                                p.kill()
+                                final_killed += 1
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            pass
+                    if final_killed:
+                        print(f"[RESTART] Final cleanup: killed {final_killed} remaining Roblox process(es)")
+                        time.sleep(1)
+                    # Clear all instance tracking to start fresh
+                    manager.instances.clear()
 
                 # Relaunch all accounts (respecting per-account default server)
                 for acc_name in relaunch_accounts:
