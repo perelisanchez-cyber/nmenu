@@ -1033,6 +1033,9 @@ local function calibrateOffsets()
     return foundAny
 end
 
+-- Fallback timezone offset (UTC+3 / Moscow time) used when calibration not available
+local TIMEZONE_OFFSET_FALLBACK = 10800 -- 3 hours in seconds
+
 -- Calculate next spawn and despawn times using calibrated offset
 local function getNextSpawn(config)
     local now = workspace:GetServerTimeNow()
@@ -1040,16 +1043,21 @@ local function getNextSpawn(config)
     local cd = config.cooldown
     local dur = config.duration
 
-    -- Get calibrated offset for this cooldown, or try to find one
+    -- Get calibrated offset for this cooldown
     local offset = calibratedOffsets[cd]
+
     if not offset then
-        -- Try any available offset as fallback
+        -- Try any available calibrated offset as secondary fallback
         for _, knownOff in pairs(calibratedOffsets) do
             offset = knownOff
             break
         end
-        -- Last resort: assume offset 0 (may be inaccurate)
-        if not offset then offset = 0 end
+    end
+
+    if not offset then
+        -- Final fallback: use UTC+3 timezone offset (what the server likely uses)
+        -- The offset per cooldown is: 10800 % cooldown
+        offset = TIMEZONE_OFFSET_FALLBACK % cd
     end
 
     local base = anchor + offset
