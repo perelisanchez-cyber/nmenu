@@ -2286,31 +2286,38 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             })
 
             # Relaunch in background after delay, then verify all made it in
+            # Capture variables for closure
+            _relaunch_accounts = relaunch_accounts
+            _server_key = server_key
+            _delay = delay
+            _shutdown_ok = shutdown_ok
+            _specific_account = specific_account
+
             def delayed_relaunch():
                 # Clear old heartbeats for accounts being relaunched
                 for reporter in list(manager.player_reports.keys()):
-                    if reporter in relaunch_accounts:
+                    if reporter in _relaunch_accounts:
                         del manager.player_reports[reporter]
 
                 # Wait for private server to auto-close after all players left
-                actual_delay = delay if shutdown_ok else max(delay, 15)
-                print(f"[RESTART] Waiting {actual_delay}s for server to clear (shutdown_ok={shutdown_ok})...")
+                actual_delay = _delay if _shutdown_ok else max(_delay, 15)
+                print(f"[RESTART] Waiting {actual_delay}s for server to clear (shutdown_ok={_shutdown_ok})...")
                 time.sleep(actual_delay)
 
-                if specific_account:
+                if _specific_account:
                     # Single-account restart: only clean up that one account
                     # Don't touch other running instances
-                    inst = manager.instances.get(specific_account)
+                    inst = manager.instances.get(_specific_account)
                     if inst and inst.get("pid"):
                         try:
                             p = psutil.Process(inst["pid"])
                             if p.is_running():
                                 p.kill()
-                                print(f"[RESTART] Final cleanup: killed {specific_account}'s process")
+                                print(f"[RESTART] Final cleanup: killed {_specific_account}'s process")
                                 time.sleep(1)
                         except (psutil.NoSuchProcess, psutil.AccessDenied):
                             pass
-                    manager.instances.pop(specific_account, None)
+                    manager.instances.pop(_specific_account, None)
                 else:
                     # Full restart: kill ALL remaining Roblox processes before relaunch
                     # This catches any that survived the initial kill or spawned during the delay
@@ -2329,22 +2336,22 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                     manager.instances.clear()
 
                 # Relaunch all accounts sorted by priority (lower = first)
-                relaunch_accounts = manager.get_accounts_by_priority(relaunch_accounts)
-                print(f"[RESTART] Launch order (by priority): {relaunch_accounts}")
-                for acc_name in relaunch_accounts:
-                    acc_server = manager.get_default_server(acc_name) or server_key
+                sorted_accounts = manager.get_accounts_by_priority(_relaunch_accounts)
+                print(f"[RESTART] Launch order (by priority): {sorted_accounts}")
+                for acc_name in sorted_accounts:
+                    acc_server = manager.get_default_server(acc_name) or _server_key
                     result = manager.launch_instance(acc_name, acc_server)
                     print(f"[RESTART] Relaunched {acc_name} -> {acc_server}: {result}")
                     time.sleep(5)  # Stagger launches (5s to let autoexec complete)
 
                 # Verify phase: wait for heartbeats then check who's missing
-                print(f"[VERIFY] Waiting 45s for all accounts to join {server_key}...")
+                print(f"[VERIFY] Waiting 45s for all accounts to join {_server_key}...")
                 time.sleep(45)
 
-                missing_info = manager.get_missing_accounts(server_key, max_age=60)
+                missing_info = manager.get_missing_accounts(_server_key, max_age=60)
                 missing = missing_info.get("missing", [])
                 present = missing_info.get("present", [])
-                print(f"[VERIFY] {server_key}: {len(present)} present, {len(missing)} missing")
+                print(f"[VERIFY] {_server_key}: {len(present)} present, {len(missing)} missing")
 
                 if missing:
                     print(f"[VERIFY] Missing accounts: {missing} — relaunching...")
@@ -2362,12 +2369,12 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                                 pass
                         # Clear instance tracking so launch won't be blocked
                         manager.instances.pop(acc_name, None)
-                        acc_server = manager.get_default_server(acc_name) or server_key
+                        acc_server = manager.get_default_server(acc_name) or _server_key
                         result = manager.launch_instance(acc_name, acc_server)
                         print(f"[VERIFY] Re-relaunched {acc_name} -> {acc_server}: {result}")
                         time.sleep(5)  # 5s delay for autoexec
                 else:
-                    print(f"[VERIFY] All accounts confirmed in {server_key}!")
+                    print(f"[VERIFY] All accounts confirmed in {_server_key}!")
 
             threading.Thread(target=delayed_relaunch, daemon=True).start()
             return
