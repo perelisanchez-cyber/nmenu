@@ -2237,7 +2237,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                     acc_server = manager.get_default_server(acc_name) or server_key
                     result = manager.launch_instance(acc_name, acc_server)
                     print(f"[RESTART] Relaunched {acc_name} -> {acc_server}: {result}")
-                    time.sleep(2)  # Stagger launches
+                    time.sleep(5)  # Stagger launches (5s to let autoexec complete)
 
                 # Verify phase: wait for heartbeats then check who's missing
                 print(f"[VERIFY] Waiting 45s for all accounts to join {server_key}...")
@@ -2264,7 +2264,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                         acc_server = manager.get_default_server(acc_name) or server_key
                         result = manager.launch_instance(acc_name, acc_server)
                         print(f"[VERIFY] Re-relaunched {acc_name} -> {acc_server}: {result}")
-                        time.sleep(2)
+                        time.sleep(5)  # 5s delay for autoexec
                 else:
                     print(f"[VERIFY] All accounts confirmed in {server_key}!")
 
@@ -2712,30 +2712,38 @@ class RobloxManagerApp:
         return [name for name, var in self.acc_selection.items() if var.get()]
 
     def _launch_selected(self):
-        """Launch all selected accounts sequentially."""
+        """Launch all selected accounts sequentially with 5s delay between each."""
         selected = self._get_selected_accounts()
         if not selected:
             self.log("No accounts selected", "warn")
             return
 
         total = len(selected)
-        self.log(f"Launching {total} account{'s' if total != 1 else ''}...")
+        self.log(f"Launching {total} account{'s' if total != 1 else ''} (5s between each)...")
 
-        for i, name in enumerate(selected):
-            default_srv = manager.get_default_server(name)
-            srv = default_srv if default_srv and default_srv in SERVERS else None
-            label = SERVERS[srv]["name"] if srv else "public"
+        def do_launches():
+            for i, name in enumerate(selected):
+                default_srv = manager.get_default_server(name)
+                srv = default_srv if default_srv and default_srv in SERVERS else None
+                label = SERVERS[srv]["name"] if srv else "public"
 
-            self.log(f"[{i+1}/{total}] Launching {name} → {label}...")
+                self.root.after(0, lambda n=name, l=label, idx=i: self.log(f"[{idx+1}/{total}] Launching {n} → {l}..."))
 
-            r = manager.launch_instance(name, srv)
-            if r.get("success"):
-                self.log(f"✔ {name} launched (PID {r['pid']})", "success")
-            else:
-                self.log(f"✘ {name} failed: {r.get('error', '?')}", "error")
+                r = manager.launch_instance(name, srv)
+                if r.get("success"):
+                    self.root.after(0, lambda n=name, pid=r['pid']: self.log(f"✔ {n} launched (PID {pid})", "success"))
+                else:
+                    err = r.get('error', '?')
+                    self.root.after(0, lambda n=name, e=err: self.log(f"✘ {n} failed: {e}", "error"))
 
-        self.log(f"Launch complete ({total} accounts)", "success")
-        self.root.after(500, self._refresh_accounts)
+                # Wait 5s before launching next account (except after last one)
+                if i < total - 1:
+                    time.sleep(5)
+
+            self.root.after(0, lambda: self.log(f"Launch complete ({total} accounts)", "success"))
+            self.root.after(500, self._refresh_accounts)
+
+        threading.Thread(target=do_launches, daemon=True).start()
 
     def _login_browser(self):
         if getattr(self, '_login_pending', False):
@@ -3492,6 +3500,9 @@ class RobloxManagerApp:
                 err = result.get("error", "unknown")
                 self.root.after(0, lambda: self.log(
                     f"\u274C {acc_name} relaunch failed: {err}", "error"))
+
+            # Wait 5s after launch to let autoexec complete before launching next account
+            time.sleep(5)
         except Exception as ex:
             self.root.after(0, lambda: self.log(
                 f"\u274C {acc_name} relaunch crashed: {ex}", "error"))
