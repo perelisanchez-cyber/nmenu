@@ -243,42 +243,38 @@ end
 local function setupFasterEggOpening()
     task.spawn(function()
         pcall(function()
-            local LP = Config.LocalPlayer
-            local stars = require(LP.PlayerScripts.MetaService.Client.Stars)
-            local originalStarOpen = stars.StarOpen
+            -- Store original task.wait in getgenv() so it persists
+            if not getgenv().OriginalTaskWait then
+                getgenv().OriginalTaskWait = task.wait
+            end
 
-            stars.StarOpen = function(petData)
-                if not Config.Toggles.utilityToggles.FasterEggOpening then
-                    return originalStarOpen(petData)
+            -- Replace task.wait globally - checks toggle flag
+            task.wait = function(duration)
+                if Config.Toggles.utilityToggles.FasterEggOpening and duration and duration > 0.1 then
+                    return getgenv().OriginalTaskWait(0.01)
                 end
+                return getgenv().OriginalTaskWait(duration)
+            end
 
-                -- Try to speed up by using hookfunction if available (some executors)
-                local hooked = false
-                local originalWait = task.wait
+            -- Hook TweenService:Create to make tweens instant when enabled
+            local TweenService = game:GetService("TweenService")
+            if hookmetamethod then
+                local oldNamecall
+                oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+                    local method = getnamecallmethod()
+                    local args = {...}
 
-                pcall(function()
-                    if hookfunction then
-                        local fastWait = function(duration)
-                            if duration and duration > 0.1 then
-                                return originalWait(0.02)
-                            end
-                            return originalWait(duration)
-                        end
-                        hookfunction(task.wait, fastWait)
-                        hooked = true
+                    if Config.Toggles.utilityToggles.FasterEggOpening
+                        and self == TweenService
+                        and method == "Create"
+                    then
+                        -- Make tween instant
+                        args[2] = TweenInfo.new(0, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, 0, false, 0)
+                        return oldNamecall(self, unpack(args))
                     end
+
+                    return oldNamecall(self, ...)
                 end)
-
-                local result = originalStarOpen(petData)
-
-                -- Restore if we hooked
-                if hooked then
-                    pcall(function()
-                        hookfunction(task.wait, originalWait)
-                    end)
-                end
-
-                return result
             end
         end)
     end)
