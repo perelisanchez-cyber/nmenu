@@ -247,29 +247,36 @@ local function setupFasterEggOpening()
             local stars = require(LP.PlayerScripts.MetaService.Client.Stars)
             local originalStarOpen = stars.StarOpen
 
+            -- Store original task.wait for hookfunction
+            local realTaskWait = task.wait
+            local isSpeedingUp = false
+
             stars.StarOpen = function(petData)
                 if not Config.Toggles.utilityToggles.FasterEggOpening then
                     return originalStarOpen(petData)
                 end
 
-                -- Speed up by temporarily replacing task.wait (like original)
-                local oldWait = task.wait
-                local fastWait = function(duration)
-                    if duration and duration > 0.1 then
-                        return oldWait(0.05)  -- Speed up long waits
-                    else
-                        return oldWait(duration)  -- Keep short waits normal
-                    end
-                end
+                -- Use hookfunction to intercept task.wait during egg opening
+                local oldWait = nil
+                local success = pcall(function()
+                    oldWait = hookfunction(task.wait, function(duration)
+                        if duration and duration > 0.1 then
+                            return realTaskWait(0.05)
+                        else
+                            return realTaskWait(duration)
+                        end
+                    end)
+                end)
 
-                -- Temporarily replace task.wait
-                task.wait = fastWait
-
-                -- Call original function with faster waits
+                -- Call original function (with hooked waits if hookfunction worked)
                 local result = originalStarOpen(petData)
 
-                -- Restore original wait
-                task.wait = oldWait
+                -- Restore original task.wait
+                if success and oldWait then
+                    pcall(function()
+                        hookfunction(task.wait, oldWait)
+                    end)
+                end
 
                 return result
             end
