@@ -51,6 +51,18 @@ if IS_WINDOWS:
     import ctypes
     import ctypes.wintypes
 
+    # Set up argtypes for Windows API functions to handle 64-bit HWNDs properly
+    ctypes.windll.user32.GetWindowThreadProcessId.argtypes = [ctypes.wintypes.HWND, ctypes.POINTER(ctypes.wintypes.DWORD)]
+    ctypes.windll.user32.GetWindowThreadProcessId.restype = ctypes.wintypes.DWORD
+    ctypes.windll.user32.IsWindowVisible.argtypes = [ctypes.wintypes.HWND]
+    ctypes.windll.user32.IsWindowVisible.restype = ctypes.wintypes.BOOL
+    ctypes.windll.user32.GetWindowTextLengthW.argtypes = [ctypes.wintypes.HWND]
+    ctypes.windll.user32.GetWindowTextLengthW.restype = ctypes.c_int
+    ctypes.windll.user32.GetWindowRect.argtypes = [ctypes.wintypes.HWND, ctypes.POINTER(ctypes.wintypes.RECT)]
+    ctypes.windll.user32.GetWindowRect.restype = ctypes.wintypes.BOOL
+    ctypes.windll.user32.SetWindowPos.argtypes = [ctypes.wintypes.HWND, ctypes.wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.wintypes.UINT]
+    ctypes.windll.user32.SetWindowPos.restype = ctypes.wintypes.BOOL
+
 # ============================================================================
 # WINDOW LAYOUT HELPERS (Windows only)
 # ============================================================================
