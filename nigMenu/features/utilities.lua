@@ -247,34 +247,34 @@ local function setupFasterEggOpening()
             local stars = require(LP.PlayerScripts.MetaService.Client.Stars)
             local originalStarOpen = stars.StarOpen
 
-            -- Store original task.wait for hookfunction
-            local realTaskWait = task.wait
-            local isSpeedingUp = false
-
             stars.StarOpen = function(petData)
                 if not Config.Toggles.utilityToggles.FasterEggOpening then
                     return originalStarOpen(petData)
                 end
 
-                -- Use hookfunction to intercept task.wait during egg opening
-                local oldWait = nil
-                local success = pcall(function()
-                    oldWait = hookfunction(task.wait, function(duration)
-                        if duration and duration > 0.1 then
-                            return realTaskWait(0.05)
-                        else
-                            return realTaskWait(duration)
+                -- Try to speed up by using hookfunction if available (some executors)
+                local hooked = false
+                local originalWait = task.wait
+
+                pcall(function()
+                    if hookfunction then
+                        local fastWait = function(duration)
+                            if duration and duration > 0.1 then
+                                return originalWait(0.02)
+                            end
+                            return originalWait(duration)
                         end
-                    end)
+                        hookfunction(task.wait, fastWait)
+                        hooked = true
+                    end
                 end)
 
-                -- Call original function (with hooked waits if hookfunction worked)
                 local result = originalStarOpen(petData)
 
-                -- Restore original task.wait
-                if success and oldWait then
+                -- Restore if we hooked
+                if hooked then
                     pcall(function()
-                        hookfunction(task.wait, oldWait)
+                        hookfunction(task.wait, originalWait)
                     end)
                 end
 
