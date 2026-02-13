@@ -241,6 +241,39 @@ end
 -- ============================================================================
 
 local function setupFasterEggOpening()
+    local playerGui = game:GetService("Players").LocalPlayer.PlayerGui
+    local lighting = game:GetService("Lighting")
+    local camera = workspace.CurrentCamera
+
+    -- GUIs to hide during hatching
+    local guisToHide = {
+        "OpenedUnits",
+        "EggAnimation",
+        "OverlayGui"
+    }
+
+    -- GUIs to KEEP visible (force enabled)
+    local guisToKeep = {
+        "UI",
+        "ScreenGui",
+        "MainGui",
+        "HUD"
+    }
+
+    -- Kill blur effects
+    local function killBlur()
+        for _, effect in pairs(lighting:GetChildren()) do
+            if effect:IsA("BlurEffect") then
+                effect.Enabled = false
+            end
+        end
+        for _, effect in pairs(camera:GetChildren()) do
+            if effect:IsA("BlurEffect") then
+                effect.Enabled = false
+            end
+        end
+    end
+
     task.spawn(function()
         pcall(function()
             -- Store original task.wait in getgenv() so it persists
@@ -276,7 +309,46 @@ local function setupFasterEggOpening()
                     return oldNamecall(self, ...)
                 end)
             end
+
+            -- Listen for new blur effects being added
+            lighting.ChildAdded:Connect(function(e)
+                if Config.Toggles.utilityToggles.FasterEggOpening and e:IsA("BlurEffect") then
+                    e.Enabled = false
+                end
+            end)
+            camera.ChildAdded:Connect(function(e)
+                if Config.Toggles.utilityToggles.FasterEggOpening and e:IsA("BlurEffect") then
+                    e.Enabled = false
+                end
+            end)
         end)
+    end)
+
+    -- GUI hiding/forcing loop
+    task.spawn(function()
+        while Config.State.running do
+            if Config.Toggles.utilityToggles.FasterEggOpening then
+                -- Force hide hatching GUIs
+                for _, guiName in pairs(guisToHide) do
+                    local gui = playerGui:FindFirstChild(guiName)
+                    if gui and gui:IsA("ScreenGui") and gui.Enabled then
+                        gui.Enabled = false
+                    end
+                end
+
+                -- Force show main UI
+                for _, guiName in pairs(guisToKeep) do
+                    local gui = playerGui:FindFirstChild(guiName)
+                    if gui and gui:IsA("ScreenGui") and not gui.Enabled then
+                        gui.Enabled = true
+                    end
+                end
+
+                -- Kill blur effects
+                killBlur()
+            end
+            task.wait(0.05)
+        end
     end)
 end
 
