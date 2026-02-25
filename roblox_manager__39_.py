@@ -1109,6 +1109,8 @@ class AccountManager:
         # Restart cooldown: prevent concurrent restart requests
         self.last_restart_time = 0
         self.restart_cooldown = 30  # seconds
+        # Health check flag: set by GUI based on requireHeartbeat setting
+        self.health_check_enabled = True
         self.load_data()
 
     def load_data(self):
@@ -1556,7 +1558,10 @@ class AccountManager:
 
             # Launch health check: aggressive check after grace period
             # This catches Roblox stuck on "Loading... 100%" screen
+            # Only runs if health_check_enabled (controlled by GUI toggle)
             def launch_health_check():
+                if not self.health_check_enabled:
+                    return
                 # Capture launch_id at start - if it changes, this thread is stale
                 my_launch_id = launch_id
                 acc_data = self.accounts.get(account_name, {})
@@ -2458,6 +2463,9 @@ class RobloxManagerApp:
         for acc_name in self.settings.get("watchdogAccounts", []):
             if acc_name in manager.accounts:
                 self.watchdog_accounts[acc_name] = self.settings["autoRejoinServer"]
+
+        # Sync health check flag from persisted settings
+        manager.health_check_enabled = self.settings.get("requireHeartbeat", True)
 
         # Apply saved settings to UI widgets (checkboxes, dropdowns, etc.)
         self._apply_persisted_settings_to_ui()
@@ -3559,6 +3567,8 @@ class RobloxManagerApp:
         self.settings["autoRejoinInterval"] = self.ar_delay_var.get()
         self.settings["autoRejoinServer"] = self.ar_srv_var.get()
         self.settings["requireHeartbeat"] = self.ar_heartbeat_var.get()
+        # Sync to manager so launch_health_check respects the toggle
+        manager.health_check_enabled = self.ar_heartbeat_var.get()
         # Update watched accounts from checkboxes
         self.watchdog_accounts = {}
         srv = self.ar_srv_var.get()
