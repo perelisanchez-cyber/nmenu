@@ -1372,7 +1372,8 @@ class AccountManager:
 
         place_id = place_id or PLACE_ID
         launch_time = int(time.time() * 1000)
-        browser_tracker_id = str(random.randint(100000, 130000)) + str(random.randint(100000, 900000))
+        # BrowserTrackerID format matches RAM exactly: r.Next(100000, 175000) + r.Next(100000, 900000)
+        browser_tracker_id = str(random.randint(100000, 174999)) + str(random.randint(100000, 899999))
 
         if server_key and server_key in SERVERS:
             srv = SERVERS[server_key]
@@ -1413,20 +1414,22 @@ class AccountManager:
                 pass
 
         try:
-            # Launch via shell execute with roblox-player: protocol URI
-            # Use cmd.exe /c start to completely detach from Python process
-            # This avoids Volt detecting the Python parent process as VM-like
+            # Launch via ShellExecuteW - same method .NET Process.Start uses internally
+            # This is exactly how Roblox Account Manager launches Roblox
             if IS_WINDOWS:
-                # DETACHED_PROCESS + CREATE_NEW_PROCESS_GROUP fully separates the child
-                CREATE_NEW_PROCESS_GROUP = 0x00000200
-                DETACHED_PROCESS = 0x00000008
-                CREATE_NO_WINDOW = 0x08000000
-                subprocess.Popen(
-                    f'cmd.exe /c start "" "{launch_url}"',
-                    shell=True,
-                    creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW,
-                    close_fds=True
+                # ShellExecuteW(hwnd, lpOperation, lpFile, lpParameters, lpDirectory, nShowCmd)
+                # SW_SHOWNORMAL = 1
+                result = ctypes.windll.shell32.ShellExecuteW(
+                    None,           # hwnd - no parent window
+                    "open",         # operation
+                    launch_url,     # file (protocol URL)
+                    None,           # parameters
+                    None,           # directory
+                    1               # SW_SHOWNORMAL
                 )
+                # ShellExecuteW returns > 32 on success
+                if result <= 32:
+                    return {"error": f"ShellExecute failed with code {result}"}
             else:
                 subprocess.Popen(["xdg-open", launch_url])
 
