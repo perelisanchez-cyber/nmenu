@@ -262,7 +262,13 @@ def select_profile():
 
     # Set global variables based on selection
     CURRENT_PROFILE = selected[0]
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    # Handle both normal Python and PyInstaller frozen exe
+    if getattr(sys, 'frozen', False):
+        # Running as compiled exe
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        # Running as script
+        base_dir = os.path.dirname(os.path.abspath(__file__))
     DATA_FILE = os.path.join(base_dir, f"roblox_manager_data_{CURRENT_PROFILE.lower()}.json")
     DEFAULT_SERVERS = PROFILES[CURRENT_PROFILE]["default_servers"]
 
