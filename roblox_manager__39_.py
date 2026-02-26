@@ -696,7 +696,7 @@ if IS_WINDOWS:
         return None
 
     # ── Multi-Instance: Hold the singleton mutex/event BEFORE Roblox launches ──
-    # Same approach as MultiBloxy, ic3w0lf22/ROBLOX_MULTI, Fishstrap/Bloxstrap.
+    # Same approach as Roblox Account Manager (ic3w0lf22).
     # Roblox checks for ROBLOX_singletonMutex and ROBLOX_singletonEvent.
     # If we own them first, Roblox can't claim exclusive access → multi-instance works.
 
@@ -726,120 +726,28 @@ if IS_WINDOWS:
             else:
                 print(f"[-] Failed to create event: {name} (error={kernel32.GetLastError()})")
 
-    def close_singleton_from_process(pid):
-        """Close ROBLOX_singletonEvent handle inside a specific Roblox process.
-        This is needed when a Roblox instance managed to create the event before us,
-        or when we need to clean up a specific process's hold on it."""
-        ntdll = ctypes.windll.ntdll
-        kernel32 = ctypes.windll.kernel32
-
-        class SYSTEM_HANDLE_TABLE_ENTRY_INFO(ctypes.Structure):
-            _fields_ = [
-                ("UniqueProcessId", ctypes.c_ushort),
-                ("CreatorBackTraceIndex", ctypes.c_ushort),
-                ("ObjectTypeIndex", ctypes.c_ubyte),
-                ("HandleAttributes", ctypes.c_ubyte),
-                ("HandleValue", ctypes.c_ushort),
-                ("Object", ctypes.c_void_p),
-                ("GrantedAccess", ctypes.c_ulong),
-            ]
-
-        buf_size = 0x10000
-        while True:
-            buf = ctypes.create_string_buffer(buf_size)
-            ret_length = ctypes.c_ulong(0)
-            status = ntdll.NtQuerySystemInformation(16, buf, buf_size, ctypes.byref(ret_length))
-            if status == 0xC0000004:  # STATUS_INFO_LENGTH_MISMATCH
-                buf_size *= 2
-                continue
-            break
-
-        if status != 0:
-            return 0
-
-        handle_count = struct.unpack_from("I", buf.raw, 0)[0]
-        offset = ctypes.sizeof(ctypes.c_ulong)
-        entry_size = ctypes.sizeof(SYSTEM_HANDLE_TABLE_ENTRY_INFO)
-        DUPLICATE_CLOSE_SOURCE = 0x00000001
-        DUPLICATE_SAME_ACCESS = 0x00000002
-        PROCESS_DUP_HANDLE = 0x0040
-        HANDLE = ctypes.c_void_p
-        closed = 0
-
-        target_pids = {pid}
-
-        for i in range(min(handle_count, 500000)):
-            entry = SYSTEM_HANDLE_TABLE_ENTRY_INFO.from_buffer_copy(buf.raw, offset + i * entry_size)
-            if entry.UniqueProcessId not in target_pids:
-                continue
-            # Mutex/Event type indices vary by Windows version, check a broad range
-            if entry.ObjectTypeIndex not in range(15, 25):
-                continue
-
-            handle_val = entry.HandleValue
-            proc_handle = kernel32.OpenProcess(PROCESS_DUP_HANDLE, False, entry.UniqueProcessId)
-            if not proc_handle:
-                continue
-
-            dup_handle = HANDLE()
-            status = ntdll.NtDuplicateObject(
-                proc_handle, handle_val,
-                kernel32.GetCurrentProcess(), ctypes.byref(dup_handle),
-                0, 0, DUPLICATE_SAME_ACCESS,
-            )
-
-            if status != 0 or not dup_handle:
-                kernel32.CloseHandle(proc_handle)
-                continue
-
-            buf2 = ctypes.create_string_buffer(1024)
-            ret_len = ctypes.c_ulong(0)
-            status = ntdll.NtQueryObject(dup_handle, 1, buf2, 1024, ctypes.byref(ret_len))
-            kernel32.CloseHandle(dup_handle.value if isinstance(dup_handle, ctypes.c_void_p) else dup_handle)
-
-            if status == 0 and ret_len.value > 0:
-                try:
-                    name_len = struct.unpack_from("H", buf2.raw, 0)[0]
-                    if name_len > 0:
-                        name_bytes = buf2.raw[8 : 8 + name_len]
-                        name = name_bytes.decode("utf-16-le", errors="ignore")
-                        if "ROBLOX_singleton" in name:
-                            dup2 = HANDLE()
-                            ntdll.NtDuplicateObject(
-                                proc_handle, handle_val,
-                                kernel32.GetCurrentProcess(), ctypes.byref(dup2),
-                                0, 0, DUPLICATE_CLOSE_SOURCE,
-                            )
-                            if dup2:
-                                kernel32.CloseHandle(dup2.value if isinstance(dup2, ctypes.c_void_p) else dup2)
-                            closed += 1
-                            print(f"[+] Closed singleton handle '{name}' from PID {entry.UniqueProcessId}")
-                except Exception:
-                    pass
-
-            kernel32.CloseHandle(proc_handle)
-
-        return closed
-
     def ensure_multi_instance():
-        """Ensure multi-instance is possible: hold mutex + clean existing processes."""
-        # First, hold the mutex ourselves
+        """Ensure multi-instance is possible by holding the mutex.
+        NOTE: If Roblox is already running when the manager starts, you may need
+        to close those instances first for multi-instance to work properly."""
         hold_mutex()
-        # Then close any existing Roblox singleton handles
+        # Check if Roblox is already running and warn user
+        roblox_running = False
         for proc in psutil.process_iter(["pid", "name"]):
             try:
                 if proc.info["name"] and "RobloxPlayerBeta" in proc.info["name"]:
-                    close_singleton_from_process(proc.info["pid"])
+                    roblox_running = True
+                    break
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
+        if roblox_running:
+            print("[!] Warning: Roblox is already running. Close existing instances for multi-instance to work.")
 
 else:
     def dpapi_decrypt(encrypted):
         return None
     def hold_mutex():
         pass
-    def close_singleton_from_process(pid):
-        return 0
     def ensure_multi_instance():
         pass
 
@@ -1495,15 +1403,6 @@ class AccountManager:
                 f"+browsertrackerid:{browser_tracker_id}+robloxLocale:en_us+gameLocale:en_us+channel:+LaunchExp:InApp"
             )
 
-        # Clean any singleton handles from existing Roblox processes
-        for p in psutil.process_iter(["pid", "name"]):
-            try:
-                if p.info["name"] and "RobloxPlayerBeta" in p.info["name"]:
-                    close_singleton_from_process(p.info["pid"])
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                pass
-        time.sleep(0.3)
-
         # Get PIDs of ALL currently running Roblox processes BEFORE we launch
         pids_before = set()
         for p in psutil.process_iter(["pid", "name"]):
@@ -1544,7 +1443,6 @@ class AccountManager:
                                 if not already_tracked:
                                     self.instances[account_name]["pid"] = p.info["pid"]
                                     print(f"[PID] {account_name}: tracked PID {p.info['pid']}")
-                                    close_singleton_from_process(p.info["pid"])
                                     # Add to pids_before so other concurrent launches don't grab it
                                     pids_before.add(p.info["pid"])
                                     # Restore saved window layout (runs in background)
@@ -2070,15 +1968,6 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             return
         if len(parts) >= 2 and parts[0] == "launch":
             self._respond(200, manager.launch_instance(parts[1], parts[2] if len(parts) > 2 else None))
-            return
-        if path == "kill-mutex":
-            for p in psutil.process_iter(["pid", "name"]):
-                try:
-                    if p.info["name"] and "RobloxPlayerBeta" in p.info["name"]:
-                        close_singleton_from_process(p.info["pid"])
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
-            self._respond(200, {"status": "ok"})
             return
 
         # GET /players — all player reports from Lua heartbeats
@@ -3357,17 +3246,8 @@ class RobloxManagerApp:
         threading.Thread(target=do, daemon=True).start()
 
     def _do_kill_mutex(self):
-        self.log("Cleaning singleton handles from running Roblox processes...")
-        def do():
-            c = 0
-            for p in psutil.process_iter(["pid", "name"]):
-                try:
-                    if p.info["name"] and "RobloxPlayerBeta" in p.info["name"]:
-                        c += close_singleton_from_process(p.info["pid"])
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
-            self.root.after(0, lambda: self.log(f"Closed {c} handle(s)", "success" if c else "warn"))
-        threading.Thread(target=do, daemon=True).start()
+        # This feature was removed - aggressive handle manipulation triggers anti-cheat
+        self.log("Mutex is held at startup. Close Roblox instances manually if needed.", "warn")
 
     def _do_kill_all_reset(self):
         """Kill ALL Roblox processes and re-acquire mutex."""
