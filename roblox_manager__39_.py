@@ -1414,8 +1414,19 @@ class AccountManager:
 
         try:
             # Launch via shell execute with roblox-player: protocol URI
+            # Use cmd.exe /c start to completely detach from Python process
+            # This avoids Volt detecting the Python parent process as VM-like
             if IS_WINDOWS:
-                os.startfile(launch_url)
+                # DETACHED_PROCESS + CREATE_NEW_PROCESS_GROUP fully separates the child
+                CREATE_NEW_PROCESS_GROUP = 0x00000200
+                DETACHED_PROCESS = 0x00000008
+                CREATE_NO_WINDOW = 0x08000000
+                subprocess.Popen(
+                    f'cmd.exe /c start "" "{launch_url}"',
+                    shell=True,
+                    creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW,
+                    close_fds=True
+                )
             else:
                 subprocess.Popen(["xdg-open", launch_url])
 
