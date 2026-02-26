@@ -2454,6 +2454,7 @@ class RobloxManagerApp:
             "autoRejoinInterval": saved.get("autoRejoinInterval", 30),
             "autoRejoinServer": saved.get("autoRejoinServer", "farm"),
             "watchdogAccounts": saved.get("watchdogAccounts", []),
+            "requireHeartbeat": saved.get("requireHeartbeat", True),
         }
 
         self._build_ui()
@@ -3597,6 +3598,7 @@ class RobloxManagerApp:
                 "autoRejoinInterval": self.settings["autoRejoinInterval"],
                 "autoRejoinServer": self.settings["autoRejoinServer"],
                 "watchdogAccounts": self.settings.get("watchdogAccounts", []),
+                "requireHeartbeat": self.settings.get("requireHeartbeat", True),
             }
             with open(DATA_FILE, "w") as f:
                 json.dump(data, f, indent=2)
